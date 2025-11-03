@@ -30,6 +30,7 @@
     (expression (number) lit-exp)
     (expression ("\""texto"\"" ) texto-lit)
     (expression ("print" "(" expression ")") print-exp) ;usar internamente el display de racket
+    (expression (primitive "(" (separated-list expression ",")")") primapp-exp)
 
     ; --- Declaraciones ---
 
@@ -168,14 +169,18 @@
 
     ))
 
+
+;***********************************************************************************************************************
+;*******************************************    Parser, Scanner, Interfaz     ******************************************
+;***********************************************************************************************************************
+
 (sllgen:make-define-datatypes scanner-interpreter grammar-simple-interpreter)
 
 (define show-the-datatypes
   (lambda () (sllgen:list-define-datatypes scanner-interpreter grammar-simple-interpreter)))
 
-;***********************************************************************************************************************
-;*******************************************    Parser, Scanner, Interfaz     ******************************************
-;***********************************************************************************************************************
+;*******************************************************************************************
+;Parser, Scanner, Interfaz
 
 ;El FrontEnd (Análisis léxico (scanner) y sintáctico (parser) integrados)
 
@@ -187,11 +192,4 @@
 (define just-scan
   (sllgen:make-string-scanner scanner-interpreter grammar-simple-interpreter))
 
-;El Interpretador (FrontEnd + Evaluación + señal para lectura )
 
-(define interpretador
-  (sllgen:make-rep-loop  "--> "
-    (lambda (pgm) (eval-program  pgm)) 
-    (sllgen:make-stream-parser 
-      scanner-spec-simple-interpreter
-      grammar-simple-interpreter)))
