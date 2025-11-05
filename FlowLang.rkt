@@ -1,5 +1,6 @@
 #lang eopl
-
+; require racket/file
+; require file-> string funcion
 ;Valores denotados: Ref(valores expresados)
 ;Valores expresado:  enteros, flotantes, complejos, cadenas de caracteres, booleanos (true, false),
 ;                    nulos, funciones, listas, diccionarios y prototipos.
