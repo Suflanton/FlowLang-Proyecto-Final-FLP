@@ -12,10 +12,9 @@
 
 (define scanner-interpreter
 '(
+  (identifier (letter (arbno (or letter digit "?" "-" "_" ":"))) symbol)
   (white-sp (whitespace) skip)
   (comment ("%" (arbno (not #\newline))) skip)
-  (texto ( (arbno (or letter "-" ":")) ) string)
-  (identifier (letter (arbno (or letter digit "?"))) symbol)
   (number (digit (arbno digit)) number)
   (number ("-" digit (arbno digit)) number)
   (number (digit (arbno digit) "." digit (arbno digit) ) number )
@@ -28,7 +27,7 @@
 (define grammar-simple-interpreter
   '((program (expression) a-program)
     (expression (number) lit-exp)
-    (expression ("\""texto"\"" ) texto-lit)
+    (expression ("\'"identifier"\'" ) texto-lit)
     (expression ("print" "(" expression ")") print-exp) ;usar internamente el display de racket
     (expression (primitive "(" (separated-list expression ",")")") primapp-exp)
     ; --- Declaraciones ---
