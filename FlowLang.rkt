@@ -119,11 +119,13 @@
     ; --- Clonación ---
     (expression ("clone" "(" expression ")") clone-exp)
     ; --- Prototipos ---
-    ;(expression ("prototipo" identifier "=" "{" (separated-list identifier ":" expression ",") "}") proto-decl-exp)
+    (expression ("prototype" identifier "=" "{" (separated-list identifier ":" expression ",") "}") proto-decl-exp)
+    ; ------- Expresión de atributo (Para acceder o modificar atributo en prototipo) ----------
+    (expression ("access" expression "." identifier property-suffix) prop-property-exp)
     ; --- Acceso a propiedad ---
-    ;(expression (expression "." identifier) prop-access-exp)
+    (property-suffix () prop-access-suffix)
     ; --- Asignación a propiedad ---
-    ;(expression (expression "." identifier "=" expression) prop-assign-exp)
+    (property-suffix ("=" expression) prop-assign-suffix)
     
 
     ; --- Expresiones booleanas ---
