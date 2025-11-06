@@ -26,7 +26,7 @@
 ;Especificación Sintáctica (gramática)
 
 (define grammar-simple-interpreter
-  '((program (expression) a-program)
+  '((program ((arbno expression) "end") a-program)
     (expression (number) lit-exp)
     (expression ("\'"identifier"\'" ) texto-lit)
     (expression ("print" "(" expression ")") print-exp) ;usar internamente el display de racket
@@ -215,3 +215,256 @@
 (define just-scan
   (sllgen:make-string-scanner scanner-interpreter grammar-simple-interpreter))
 
+;El Interpretador (FrontEnd + Evaluación + señal para lectura )
+
+(define interpretador
+  (sllgen:make-rep-loop "--> "
+    (lambda (pgm) (eval-program pgm))
+    (sllgen:make-stream-parser
+      scanner-interpreter        ; <-- El nombre correcto
+      grammar-simple-interpreter)))
+
+;***********************************************************************************************************************
+;*************************************    Valores especiales, referencia y blanco   ************************************
+;***********************************************************************************************************************
+;Procedimientos
+(define-datatype special-val special-val?
+  (void-val)
+  (null-val)
+)
+
+(define-datatype procval procval?
+  (closure
+   (ids (list-of symbol?))
+   (body expression?)
+   (env environment?)))
+
+
+(define-datatype target target?
+  ; Añade el flag 'mutable?' al 'direct-target'
+  (direct-target (expval expval?) (mutable? boolean?))
+  (indirect-target (ref ref-to-direct-target?)))
+
+(define-datatype reference reference?
+  (a-ref (position integer?) (vec vector?)))
+
+;***********************************************************************************************************************
+;**************************************************    Ambientes    ***************************************************
+;***********************************************************************************************************************
+;definición del tipo de dato ambiente
+(define-datatype environment environment?
+  (empty-env-record)
+  (extended-env-record
+   (syms (list-of symbol?))
+   (vec vector?)
+   (env environment?)))
+
+(define scheme-value? (lambda (v) #t))
+
+;empty-env:      -> enviroment
+;función que crea un ambiente vacío
+(define empty-env  
+  (lambda ()
+    (empty-env-record)))       ;llamado al constructor de ambiente vacío 
+
+
+;extend-env: <list-of symbols> <list-of numbers> enviroment -> enviroment
+;función que crea un ambiente extendido
+(define extend-env
+  (lambda (syms vals env)
+    (extended-env-record syms (list->vector vals) env)))
+
+;extend-env-recursively: <list-of symbols> <list-of <list-of symbols>> <list-of expressions> environment -> environment
+;función que crea un ambiente extendido para procedimientos recursivos
+(define extend-env-recursively
+  (lambda (proc-names idss bodies old-env)
+    (let ((len (length proc-names)))
+      (let ((vec (make-vector len)))
+        (let ((env (extended-env-record proc-names vec old-env)))
+          (for-each
+            (lambda (pos ids body)
+              (vector-set! vec pos (direct-target (closure ids body env))))
+            (iota len) idss bodies)
+          env)))))
+
+;iota: number -> list
+;función que retorna una lista de los números desde 0 hasta end
+(define iota
+  (lambda (end)
+    (let loop ((next 0))
+      (if (>= next end) '()
+        (cons next (loop (+ 1 next)))))))
+
+;función que busca un símbolo en un ambiente
+(define apply-env
+  (lambda (env sym)
+    ;(begin
+     ; (display env)
+      ;(display "jajajaj ")
+      (deref (apply-env-ref env sym))))
+    ;)
+(define apply-env-ref
+  (lambda (env sym)
+    (cases environment env
+      (empty-env-record ()
+                        (eopl:error 'apply-env-ref "No binding for ~s" sym))
+      (extended-env-record (syms vals env)
+                           (let ((pos (rib-find-position sym syms)))
+                             (if (number? pos)
+                                 (a-ref pos vals)
+                                 (apply-env-ref env sym)))))))
+;***********************************************************************************************************************
+;**************************************************    Blancos y referencias    ***************************************************
+;***********************************************************************************************************************
+
+(define expval?
+  (lambda (x)
+    (or (number? x) (procval? x))))
+
+(define ref-to-direct-target?
+  (lambda (x)
+    (and (reference? x)
+         (cases reference x
+           (a-ref (pos vec)
+                  (cases target (vector-ref vec pos)
+                    ; Coincide con 2 campos
+                    (direct-target (v mutable?) #t) 
+                    (indirect-target (v) #f)))))))
+
+(define deref
+  (lambda (ref)
+    (cases target (primitive-deref ref)
+      (direct-target (expval mutable?) expval)
+      (indirect-target (ref1)
+                       (cases target (primitive-deref ref1)
+                         (direct-target (expval mutable?) expval)
+                         (indirect-target (p)
+                                          (eopl:error 'deref
+                                                      "Illegal reference: ~s" ref1)))))))
+
+(define primitive-deref
+  (lambda (ref)
+    (cases reference ref
+      (a-ref (pos vec)
+             (vector-ref vec pos)))))
+
+(define setref!
+  (lambda (ref expval)
+    (let
+        ((ref (cases target (primitive-deref ref)
+                (direct-target (expval1 mutable?) ref)
+                (indirect-target (ref1) ref1))))
+      (primitive-setref! ref (direct-target expval)))))
+
+(define primitive-setref!
+  (lambda (ref val)
+    (cases reference ref
+      (a-ref (pos vec)
+             (vector-set! vec pos val)))))
+
+;***********************************************************************************************************************
+;**************************************************    Funciones auxiliares    ***************************************************
+;***********************************************************************************************************************
+; funciones auxiliares para encontrar la posición de un símbolo
+; en la lista de símbolos de un ambiente
+
+(define rib-find-position 
+  (lambda (sym los)
+    (list-find-position sym los)))
+
+(define list-find-position
+  (lambda (sym los)
+    (list-index (lambda (sym1) (eqv? sym1 sym)) los)))
+
+(define list-index
+  (lambda (pred ls)
+    (cond
+      ((null? ls) #f)
+      ((pred (car ls)) 0)
+      (else (let ((list-index-r (list-index pred (cdr ls))))
+              (if (number? list-index-r)
+                (+ list-index-r 1)
+                #f))))))
+;***********************************************************************************************************************
+;**************************************************    Interprete    ***************************************************
+;***********************************************************************************************************************
+
+(define init-env
+  (lambda ()
+    (extend-env
+     '(x y z)
+     (list (direct-target 1 #t)
+           (direct-target 5 #t)
+           (direct-target 10 #t))
+     (empty-env))))
+
+; El punto de entrada principal del intérprete.
+(define eval-program
+  (lambda (pgm)
+    (cases program pgm
+      
+      ; 'exps-list' es la lista que viene de (arbno expression)
+      (a-program (exps-list)
+        (eval-sequence exps-list (init-env)))
+      
+      )))
+
+; Función auxiliar para evaluar listas de expresiones secuencialmente.
+(define eval-sequence
+  (lambda (exps env)
+    (if (null? exps)
+        (void-val) ; Caso base: no hay más expresiones.
+        
+        (let ((exp1 (car exps)))
+          (cases expression exp1
+            
+            ; CASO 1: 'var' es una DECLARACIÓN (Mutable)
+            (var-decl-exp (var-list-ast)
+              (let ((new-env (eval-declarations var-list-ast env #t))) ; <-- ¡ARREGLO: Pasa #t!
+                (eval-sequence (cdr exps) new-env)))
+            
+            ; CASO 2: 'const' es una DECLARACIÓN (Inmutable)
+            (const-decl-exp (var-list-ast)
+              (let ((new-env (eval-declarations var-list-ast env #f))) ; <-- ¡ARREGLO: Pasa #f!
+                (eval-sequence (cdr exps) new-env)))
+            
+            ; CASO 3: Es una EXPRESIÓN normal (print, +, if, etc.).
+            (else
+              ; Llama al 'Especialista' (eval-expression)
+              (let ((val1 (eval-expression exp1 env)))
+                
+                ; Si es la última expresión, devuelve su valor
+                (if (null? (cdr exps))
+                    val1
+                    
+                    ; Si no, ignora el valor y sigue con el 'env' VIEJO
+                    (eval-sequence (cdr exps) env) 
+                    ))))))))
+
+; Esta función procesa la lista de (var-item) y devuelve un nuevo ambiente
+(define eval-declarations
+  (lambda (var-list-ast env is-mutable?) ; <-- Acepta el flag
+    (cases var-list var-list-ast
+      (decl-list (item1 rest-items)
+        (let ((all-items (cons item1 rest-items)))
+          (let loop ((item-list all-items) (current-env env))
+            (if (null? item-list)
+                current-env ; Devuelve el ambiente final
+                (cases var-item (car item-list)
+                  (decl-item (id exp)
+                    (let ((val (eval-expression exp current-env)))
+                      (let ((next-env 
+                             (extend-env
+                              (list id)
+                              (list (direct-target val is-mutable?)) ; <-- ¡Usa el flag!
+                              current-env)))
+                        (loop (cdr item-list) next-env))))))))))))
+
+(define eval-expression
+  (lambda (exp env)
+    1))
+
+
+;; Ejecutamos el interpretador
+
+(interpretador)
