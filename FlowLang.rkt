@@ -1,5 +1,5 @@
 #lang eopl
-; require racket/file
+(require racket/file)
 ; require file-> string funcion
 ;Valores denotados: Ref(valores expresados)
 ;Valores expresado:  enteros, flotantes, complejos, cadenas de caracteres, booleanos (true, false),
@@ -27,17 +27,15 @@
 
 (define grammar-simple-interpreter
   '((program ((arbno expression) "end") a-program)
+    (expression ("@ENV") environment-exp)
     (expression (number) lit-exp)
-    (expression ("\'"identifier"\'" ) texto-lit)
+    (expression ("\""identifier"\"" ) text-lit)
     (expression ("print" "(" expression ")") print-exp) ;usar internamente el display de racket
     (expression (primitive "(" (separated-list expression ",")")") primapp-exp)
-    ; --- Declaraciones ---
-
     
-    (var-item (identifier "=" expression) decl-item)
-    (var-list (var-item (arbno "," var-item)) decl-list)
-    (expression ("var" var-list ";") var-decl-exp)
-    (expression ("const" var-list ";") const-decl-exp)
+    ; --- Declaraciones ---
+    (expression ("var" (separated-list identifier "=" expression ",") ";") var-decl-exp)
+    (expression ("const" (separated-list identifier "=" expression ",") ";") const-decl-exp)
 
     
     ;---- Llamado de valor de variable también va a identifier exp ------
@@ -47,7 +45,6 @@
     ; --- Funcion ---
     (expression ("func" "(" (separated-list identifier ",") ")" "{"
                         (arbno expression) opt-return "}") func-exp)
-
     (opt-return ("return" expression) with-return)
     (opt-return () no-return)
     
@@ -61,8 +58,8 @@
     
     ; --- invocacion de funcion va a identifier exp ---
 
+    
     ;----- identifier exp (Para invocar funciones, actualizar valores y poner el valor de variable)---------
-
     (expression (identifier identifier-suffix) identifier-exp)
     ;------- Devolver el valor de una variable -------;
     (identifier-suffix ()
@@ -80,7 +77,11 @@
     (expression ("begin" expression (arbno ";" expression) "end") begin-exp)
 
     ; --- Condicional ---
-    (expression ("if" exp-bool "then" expression "else" (arbno expression) "end") if-exp)
+    (expression ("if" "(" expression ")" "then" "{" (arbno expression) "}"
+             (arbno "elif" "(" expression ")" "then" "{" (arbno expression) "}")
+             "else" "{" (arbno expression)
+             "}")
+            if-exp)
 
     ; --- complex ---
     (expression ("complex" "(" expression expression "i" ")") complex-exp)
@@ -93,7 +94,7 @@
                           "}") switch-exp)
 
     ; --- While ---
-    (expression ("while" exp-bool "do" expression "done") while-exp)
+    (expression ("while" expression "do" expression "done") while-exp)
 
     ; --- For ---
     (expression ("for" identifier "in" expression "do" expression "done") for-exp)
@@ -125,16 +126,14 @@
     ; --- Acceso a propiedad ---
     (property-suffix () prop-access-suffix)
     ; --- Asignación a propiedad ---
-    (property-suffix ("=" expression) prop-assign-suffix)
-    
-
+    (property-suffix ("=" expression) prop-assign-suffix)    
     ; --- Expresiones booleanas ---
-    (exp-bool (pred-prim "(" expression "," expression ")") pred-bool-exp)
-    (exp-bool (oper-bin-bool "(" exp-bool "," exp-bool ")") bin-bool-exp)
-    (exp-bool (oper-un-bool "(" exp-bool ")") un-bool-exp)
-    (exp-bool ("false") false-exp)
-    (exp-bool ("true") true-exp)
-    (exp-bool ("null") null-exp)
+    (expression (pred-prim "(" expression "," expression ")") pred-bool-exp)
+    (expression (oper-bin-bool "(" expression "," expression ")") bin-bool-exp)
+    (expression (oper-un-bool "(" expression ")") un-bool-exp)
+    (expression ("false") false-exp)
+    (expression ("true") true-exp)
+    (expression ("null") null-exp)
 
     ;;;;;;
     ; --- Primitivos relacionales y booleanos ---
@@ -233,6 +232,18 @@
   (null-val)
 )
 
+(define null-val?
+  (lambda (v)
+    (cases special-val v
+      (null-val () #t)
+      (else #f))))
+
+(define void-val?
+  (lambda (v)
+    (cases special-val v
+      (void-val () #t)
+      (else #f))))
+
 (define-datatype procval procval?
   (closure
    (ids (list-of symbol?))
@@ -298,11 +309,9 @@
 ;función que busca un símbolo en un ambiente
 (define apply-env
   (lambda (env sym)
-    ;(begin
-     ; (display env)
-      ;(display "jajajaj ")
       (deref (apply-env-ref env sym))))
     ;)
+
 (define apply-env-ref
   (lambda (env sym)
     (cases environment env
@@ -349,12 +358,31 @@
              (vector-ref vec pos)))))
 
 (define setref!
-  (lambda (ref expval)
-    (let
-        ((ref (cases target (primitive-deref ref)
-                (direct-target (expval1 mutable?) ref)
-                (indirect-target (ref1) ref1))))
-      (primitive-setref! ref (direct-target expval)))))
+  (lambda (ref expval) ; ref=llave, expval=nuevo valor (ej. 10)
+    (let* (
+           ; 1. Resuelve la indirección para encontrar la llave final
+           (final-ref (cases target (primitive-deref ref)
+                        (direct-target (v mut?) ref)
+                        (indirect-target (ref1) ref1)))
+           
+           ; 2. Obtiene el casillero (target) final
+           ; --- ¡VARIABLE RENOMBRADA! ---
+           (target-val (primitive-deref final-ref)))
+      
+      ; 3. ¡EL CHEQUEO DE SEGURIDAD!
+      ; --- ¡ARREGLADO! ---
+      ;      (cases TIPO VARIABLE ...)
+      (cases target target-val
+        (direct-target (old-val mutable?)
+          (if (eq? mutable? #t)
+              ; 4a. SÍ ES MUTABLE:
+              (primitive-setref! final-ref (direct-target expval #t))
+              
+              ; 4b. NO ES MUTABLE:
+              (eopl:error 'setref! "Asignación inválida: No se puede modificar una constante.")))
+        
+        (indirect-target (r) (eopl:error 'setref! "Error de referencia inesperado"))
+        ))))
 
 (define primitive-setref!
   (lambda (ref val)
@@ -363,7 +391,7 @@
              (vector-set! vec pos val)))))
 
 ;***********************************************************************************************************************
-;**************************************************    Funciones auxiliares    ***************************************************
+;************************************    Funciones auxiliares para ambiente    *****************************************
 ;***********************************************************************************************************************
 ; funciones auxiliares para encontrar la posición de un símbolo
 ; en la lista de símbolos de un ambiente
@@ -385,6 +413,182 @@
               (if (number? list-index-r)
                 (+ list-index-r 1)
                 #f))))))
+
+
+;***********************************************************************************************************************
+;************************************    Funciones auxiliares para interpretador    ************************************
+;***********************************************************************************************************************
+
+(define eval-primapp-exp-rands
+  (lambda (rands env)
+    (map (lambda (x) (eval-expression x env)) rands)))
+
+
+; --- Función auxiliar para desempaquetar números ---
+; Toma un 'expval' y devuelve un número crudo, o lanza un error.
+(define ensure-number
+  (lambda (val prim-name)
+    (if (number? val)
+        val
+        (eopl:error 'apply-primitive "Error en ~s: se esperaba un número, pero se recibió ~s"
+                    prim-name val))))
+
+; ---  apply-primitive---
+(define apply-primitive
+  (lambda (prim args)
+    (cases primitive prim
+      
+      (add-prim ()
+        (if (= (length args) 2)
+            (let ((n1 (ensure-number (car args) '+))
+                  (n2 (ensure-number (cadr args) '+)))
+              (+ n1 n2))
+            (eopl:error 'apply-primitive "Error en +: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+            
+      (substract-prim ()
+        (if (= (length args) 2)
+            (let ((n1 (ensure-number (car args) '-))
+                  (n2 (ensure-number (cadr args) '-)))
+              (- n1 n2))
+            (eopl:error 'apply-primitive "Error en -: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+
+      (mult-prim ()
+        (if (= (length args) 2)
+            (let ((n1 (ensure-number (car args) '*))
+                  (n2 (ensure-number (cadr args) '*)))
+              (* n1 n2))
+            (eopl:error 'apply-primitive "Error en *: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+      
+      ; --- ¡CASO AÑADIDO 1: div-prim! ---
+      (div-prim ()
+        (if (= (length args) 2)
+            (let ((n1 (ensure-number (car args) '/))
+                  (n2 (ensure-number (cadr args) '/)))
+              (if (zero? n2) ; Chequeo de división por cero
+                  (eopl:error 'apply-primitive "Error en /: División por cero.")
+                  (/ n1 n2)))
+            (eopl:error 'apply-primitive "Error en /: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+            
+      ; --- ¡CASO AÑADIDO 2: mod-prim! ---
+      (mod-prim ()
+        (if (= (length args) 2)
+            (let ((n1 (ensure-number (car args) '%))
+                  (n2 (ensure-number (cadr args) '%)))
+              (if (zero? n2) ; Chequeo de división por cero
+                  (eopl:error 'apply-primitive "Error en %: División por cero.")
+                  (modulo n1 n2)))
+            (eopl:error 'apply-primitive "Error en %: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+            
+      (incr-prim ()
+        (if (= (length args) 1)
+            (let ((n1 (ensure-number (car args) 'add1)))
+              (+ n1 1))
+            (eopl:error 'apply-primitive "Error en add1: se esperaba 1 argumento, se recibió ~s" (length args))))
+            
+      (decr-prim ()
+        (if (= (length args) 1)
+            (let ((n1 (ensure-number (car args) 'sub1)))
+              (- n1 1))
+            (eopl:error 'apply-primitive "Error en sub1: se esperaba 1 argumento, se recibió ~s" (length args))))
+      
+      )))
+
+
+; --- Especialista para 'if-exp' (Tu lógica recursiva) ---
+(define eval-if-exp
+  (lambda (all-tests all-bodies else-body env)
+    
+    ; 1. "si no quedan condiciones, haga eval sequence de las lineas del else"
+    (if (null? all-tests)
+        (eval-sequence else-body env)
+        
+        ; 2. "si quedan condiciones..."
+        (let ((test1 (car all-tests))
+              (body1 (car all-bodies)))
+          
+          ; 3. "...verifique si es verdadera"
+          (if (true-value? (eval-expression test1 env))
+              
+              ; 4. "si lo es, mande a evalsquence las lineas de ejecucion"
+              (eval-sequence body1 env)
+              
+              ; 5. "si no es verdadera, haga recursion con el cdr..."
+              (eval-if-exp (cdr all-tests) (cdr all-bodies) else-body env)
+              )))))
+
+; --- Ayudante para "Truthiness" ---
+; Define qué valores (expvals) se consideran FALSOS.
+(define false-value?
+  (lambda (val)
+    (cond
+      ; 1. El booleano #f de Racket (de un predicado como < o ==)
+      ((boolean? val) (not val))
+      
+      ; 2. Tu (null-val) (de la expresión 'null')
+      ((and (special-val? val)(null-val? val)) #t)
+      
+      ; 3. Tu (void-val) (del 'print' o fin de secuencia)
+      ((and (special-val? val) (void-val? val)) #t)
+      
+      ; 4. El número 0
+      ((and (number? val) (zero? val)) #t)
+      
+      
+      ; 5. ¡Todo lo demás se considera Verdadero!
+      (else #f)
+      )))
+
+; --- Función de Condición ---
+; Devuelve #t si un valor es "Truthy".
+(define true-value?
+  (lambda (val)
+    (not (false-value? val))))
+
+(define (apply-predicate prim val1 val2)
+  (cases pred-prim prim
+    
+    ; --- Casos Numéricos (¡Usan ensure-number!) ---
+    (less-than-prim () (< (ensure-number val1 '<) (ensure-number val2 '<)))
+    (greater-than-prim () (> (ensure-number val1 '>) (ensure-number val2 '>)))
+    (less-equal-prim () (<= (ensure-number val1 '<=) (ensure-number val2 '<=)))
+    (greater-equal-prim () (>= (ensure-number val1 '>=) (ensure-number val2 '>=)))
+    
+    ; --- Casos de Igualdad (Pueden comparar cualquier tipo) ---
+    (equal-prim () (equal? val1 val2))
+    (not-equal-prim () (not (equal? val1 val2)))
+    ))
+
+
+; --- Ayudante para 'and' y 'or' (con cortocircuito) ---
+(define (apply-bool-bin-op op exp1 exp2 env)
+  (cases oper-bin-bool op
+    
+    (and-prim ()
+      ; 1. Evalúa el primer operando
+      (let ((val1 (eval-expression exp1 env)))
+        ; 2. Si el primero es FALSO, devuelve ese valor falso y NO evalúa el segundo
+        (if (true-value? val1)
+            (eval-expression exp2 env) ; Si es verdadero, devuelve el resultado del segundo
+            val1))) ; Cortocircuito: devuelve el valor "falsy"
+            
+    (or-prim ()
+      ; 1. Evalúa el primer operando
+      (let ((val1 (eval-expression exp1 env)))
+        ; 2. Si el primero es VERDADERO, devuelve ese valor verdadero y NO evalúa el segundo
+        (if (true-value? val1)
+            val1 ; Cortocircuito: devuelve el valor "truthy"
+            (eval-expression exp2 env)))) ; Si es falso, devuelve el resultado del segundo
+    ))
+
+; --- Ayudante para 'not' ---
+(define (apply-bool-un-op op exp1 env)
+  (cases oper-un-bool op
+    (not-prim ()
+      ; 'not' siempre devuelve un booleano estricto
+      (if (true-value? (eval-expression exp1 env))
+          #f
+          #t))
+    ))
 ;***********************************************************************************************************************
 ;**************************************************    Interprete    ***************************************************
 ;***********************************************************************************************************************
@@ -409,62 +613,123 @@
       
       )))
 
-; Función auxiliar para evaluar listas de expresiones secuencialmente.
 (define eval-sequence
   (lambda (exps env)
     (if (null? exps)
-        (void-val) ; Caso base: no hay más expresiones.
-        
+        (void-val)
         (let ((exp1 (car exps)))
           (cases expression exp1
             
-            ; CASO 1: 'var' es una DECLARACIÓN (Mutable)
-            (var-decl-exp (var-list-ast)
-              (let ((new-env (eval-declarations var-list-ast env #t))) ; <-- ¡ARREGLO: Pasa #t!
+            ; --- ¡CAMBIO! ---
+            ; 'var-decl-exp' ahora entrega DOS listas
+            (var-decl-exp (ids-list exps-list)
+              (let ((new-env (eval-declarations ids-list exps-list env #t)))
                 (eval-sequence (cdr exps) new-env)))
             
-            ; CASO 2: 'const' es una DECLARACIÓN (Inmutable)
-            (const-decl-exp (var-list-ast)
-              (let ((new-env (eval-declarations var-list-ast env #f))) ; <-- ¡ARREGLO: Pasa #f!
+            ; --- ¡CAMBIO! ---
+            ; 'const-decl-exp' también entrega DOS listas
+            (const-decl-exp (ids-list exps-list)
+              (let ((new-env (eval-declarations ids-list exps-list env #f)))
                 (eval-sequence (cdr exps) new-env)))
             
-            ; CASO 3: Es una EXPRESIÓN normal (print, +, if, etc.).
             (else
-              ; Llama al 'Especialista' (eval-expression)
-              (let ((val1 (eval-expression exp1 env)))
-                
-                ; Si es la última expresión, devuelve su valor
-                (if (null? (cdr exps))
-                    val1
-                    
-                    ; Si no, ignora el valor y sigue con el 'env' VIEJO
-                    (eval-sequence (cdr exps) env) 
-                    ))))))))
+             (let ((val1 (eval-expression exp1 env)))
+               (if (null? (cdr exps))
+                   val1
+                   (eval-sequence (cdr exps) env)))))))))
 
-; Esta función procesa la lista de (var-item) y devuelve un nuevo ambiente
+; Esta función procesa DOS listas paralelas (ids y exps)
 (define eval-declarations
-  (lambda (var-list-ast env is-mutable?) ; <-- Acepta el flag
-    (cases var-list var-list-ast
-      (decl-list (item1 rest-items)
-        (let ((all-items (cons item1 rest-items)))
-          (let loop ((item-list all-items) (current-env env))
-            (if (null? item-list)
-                current-env ; Devuelve el ambiente final
-                (cases var-item (car item-list)
-                  (decl-item (id exp)
-                    (let ((val (eval-expression exp current-env)))
-                      (let ((next-env 
-                             (extend-env
-                              (list id)
-                              (list (direct-target val is-mutable?)) ; <-- ¡Usa el flag!
-                              current-env)))
-                        (loop (cdr item-list) next-env))))))))))))
+  (lambda (ids-list exps-list env is-mutable?)
+    
+    ; El bucle 'loop' ahora toma TRES argumentos
+    (let loop ((ids ids-list) 
+               (exps exps-list) 
+               (current-env env))
+      
+      ; Si la lista de IDs está vacía...
+      (if (null? ids)
+          current-env ; Devuelve el ambiente final
+          
+          ; Si no...
+          (let ( (id (car ids))
+                 (exp (car exps)) )
+            
+            (let ((val (eval-expression exp current-env)))
+              (let ((next-env 
+                     (extend-env
+                      (list id)
+                      (list (direct-target val is-mutable?)) 
+                      current-env)))
+                
+                ; Repite con el 'cdr' de AMBAS listas
+                (loop (cdr ids) (cdr exps) next-env))))
+          ))))
 
 (define eval-expression
   (lambda (exp env)
-    1))
+   (cases expression exp
+      (environment-exp () env)
+      (lit-exp (datum) datum)
+      (text-lit (text) text)
+      (true-exp () #t)
+      (false-exp () #f)
+      (null-exp () null-val)
+      (print-exp (printable)
+                 (begin
+                   (display (eval-expression printable env))
+                   (newline)))
+      (identifier-exp (id suffix)
+                      (eval-identifier-suffix id suffix env))
+      (primapp-exp (prim rands)
+                   (let ((args (eval-primapp-exp-rands rands env)))
+                     (apply-primitive prim args)))
+     
+     (if-exp (test1 then-body elif-tests elif-bodies else-body)
+        (let ((all-tests (cons test1 elif-tests))
+              
+              ; 2. Crea la lista de TODOS los cuerpos
+              (all-bodies (cons then-body elif-bodies)))
+          
+          ; 3. Llama al nuevo especialista con las listas completas
+          (eval-if-exp all-tests all-bodies else-body env)
+          ))
+
+     (pred-bool-exp (prim exp1 exp2)
+      (apply-predicate prim 
+                       (eval-expression exp1 env) 
+                       (eval-expression exp2 env)))
+                       
+    (bin-bool-exp (op exp1 exp2)
+      (apply-bool-bin-op op exp1 exp2 env))
+      
+    (un-bool-exp (op exp1)
+      (apply-bool-un-op op exp1 env))
+
+     (else 1))))
 
 
-;; Ejecutamos el interpretador
+(define eval-identifier-suffix
+  (lambda (id suffix env)
+    (cases identifier-suffix suffix
+      (val-var-suffix () (apply-env env id))
+      (else 'faltan_casos))))
+
+
+;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
 
 (interpretador)
+
+
+
+;***********************************************************************************************************************
+;************************************    Ejecución del programa mediante un txt    *************************************
+;***********************************************************************************************************************
+
+(define file
+  (file->string "program.txt"))
+
+(define AST-program-txt
+  (scan&parse file))
+
+(eval-program AST-program-txt)
