@@ -44,13 +44,18 @@
     
     ; --- Funcion ---
     (expression ("func" identifier "(" (separated-list identifier ",") ")" "{"
-                        (arbno expression) opt-return "}") func-exp)
+                        (arbno expression)"}") func-exp)
     ; --- Funcion anónima ----
     (expression ("lambda"  "(" (separated-list identifier ",") ")" "{"
                         expression "}") lambda-exp)
     
-    (opt-return ("return" expression) with-return)
-    (opt-return () no-return)
+    ;------ Retorno para función (Sirve como una detención de un flujo de secuencias, más o menos como un break)----------
+    
+    (expression ("return" opt-return-val) return-exp) ; <-- Nueva regla principal
+    
+    (opt-return-val (expression) with-return-val)   ; <-- Variante 1: Había un valor
+    (opt-return-val ("") no-return-val)
+
     
     ; --- Función sin return (implícito null) ---
     ;(expression ("func" "(" (separated-list identifier ",") ")" "{"
@@ -262,6 +267,9 @@
 
 (define-datatype reference reference?
   (a-ref (position integer?) (vec vector?)))
+
+(define-datatype return-value return-value?
+  (a-return-value (val expval?)))
 
 ;***********************************************************************************************************************
 ;**************************************************    Ambientes    ***************************************************
@@ -598,22 +606,6 @@
           #t))
     ))
 
-; --- Ayudante para manejar 'opt-return' ---
-; Combina el cuerpo (body-exps) y el return (opt-return-ast)
-; en una sola lista de expresiones para la clausura.
-(define (eval-opt-return body-exps opt-return-ast)
-  (cases opt-return opt-return-ast
-    
-    ; Caso 1: El programador escribió "return exp;"
-    (with-return (return-exp)
-      ; El cuerpo es la lista de expresiones + la expresión del return
-      (append body-exps (list return-exp)))
-      
-    ; Caso 2: El programador NO escribió "return"
-    (no-return ()
-      ; El cuerpo es la lista de expresiones + un 'null' implícito al final que va a ser lo que hay que devolver
-      (append body-exps (list (null-exp))))
-    ))
 
 (define eval-rands
   (lambda (rands env)
@@ -698,25 +690,31 @@
                 (eval-sequence (cdr exps) new-env)))
 
             ; --- CASO FUNCION (Recursiva o normal) ---
-            (func-exp (proc-name id-list body-exps opt-return-ast)
-              ; 1. Prepara el cuerpo (usando el ayudante que ya tienes)
-              (let ((body (eval-opt-return body-exps opt-return-ast)))
-                ; 2. Llama a la "magia" recursiva
-                (let ((new-env 
-                        (extend-env-recursively
-                         (list proc-name) ; Lista de nombres: '(f)
-                         (list id-list)   ; Lista de listas de args: '((x y))
-                         (list body)      ; Lista de cuerpos: '(...)
-                         env)))
-                  ; 3. Continúa en el nuevo ambiente
-                  (eval-sequence (cdr exps) new-env))))
+            (func-exp (proc-name id-list body-exps)
+            (let ((new-env 
+                    (extend-env-recursively
+                     (list proc-name)
+                     (list id-list)
+                     (list body-exps) ; <-- Pasa el 'body-exps' (lista) directo
+                     env)))
+              (eval-sequence (cdr exps) new-env)))
+          
+          (else
+           ; --- ¡LÓGICA DE PROPAGACIÓN DE 'RETURN'! ---
+           (let ((val1 (eval-expression exp1 env)))
+             
+             ; 1. ¿Es un paquete de retorno?
+             (if (return-value? val1)
+                 val1 ; <-- ¡ALTO! Pasa el paquete hacia arriba
+                 
+                 ; 2. No es un retorno, continúa normal
+                 (if (null? (cdr exps))
+                     val1
+                     (eval-sequence (cdr exps) env)))))
             
-            ; --- CASO ELSE (Expresiones normales) ---
-            (else
-             (let ((val1 (eval-expression exp1 env)))
-               (if (null? (cdr exps))
-                   val1
-                   (eval-sequence (cdr exps) env)))))))))
+
+
+            )))))
 
 ; Esta función procesa DOS listas paralelas (ids y exps)
 (define eval-declarations
@@ -789,21 +787,47 @@
           ; 2. ¡Crea una clausura no recursiva porque es una funcion que no se guarda en una variable entonces es no recursiva
           (closure id-list (list body-exp) env))
 
+     (return-exp (opt-val)
+                 (eval-return-exp opt-val env))
+
      (else 1))))
 
+(define eval-return-exp
+  (lambda (opt-AST env)
+    (cases opt-return-val opt-AST
+        
+        ; 2a. Si era 'return 5;'
+        (with-return-val (exp1)
+          (let ((val (eval-expression exp1 env)))
+            (a-return-value val))) ; <-- Envuelve el valor
+            
+        ; 2b. Si era 'return;'
+        (no-return-val ()
+          (a-return-value (void-val))) ; <-- Envuelve 'void'
+        
+        )))
 
-(define apply-procedure
-  (lambda (proc arg-targets) ; <-- ¡Recibe 'targets', no 'args'!
-    (cases procval proc
-      (closure (ids body saved-env)
-        (if (= (length ids) (length arg-targets))
-            ; --- ¡CAMBIO! ---
-            ; Ya no hay (map ... direct-target ...).
-            ; Los 'arg-targets' (directos e indirectos) se pasan tal cual.
-            (let ((new-env (extend-env ids arg-targets saved-env)))
-              (eval-sequence body new-env))
-            (eopl:error 'apply-procedure "Error de aridad: la función esperaba ~s args, recibió ~s"
-                        (length ids) (length arg-targets)))))))
+
+
+(define (apply-procedure proc arg-targets)
+  (cases procval proc
+    (closure (ids body saved-env)
+      (if (= (length ids) (length arg-targets))
+          (let ((new-env (extend-env ids arg-targets saved-env)))
+            
+            ; 1. Llama a eval-sequence (que podría devolver un paquete)
+            (let ((result (eval-sequence body new-env)))
+              
+              ; 2. ¡Atrapa el paquete!
+              (if (return-value? result)
+                  ; 3a. Desenuelve el valor
+                  (cases return-value result
+                    (a-return-value (val) val))
+                  ; 3b. No hubo 'return', devuelve el valor de la última exp
+                  result 
+                  )))
+          (eopl:error 'apply-procedure "Error de aridad: la función esperaba ~s args, recibió ~s"
+                        (length ids) (length arg-targets))))))
 
 
 
