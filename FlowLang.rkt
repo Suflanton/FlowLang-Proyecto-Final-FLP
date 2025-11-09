@@ -43,8 +43,12 @@
     
     
     ; --- Funcion ---
-    (expression ("func" "(" (separated-list identifier ",") ")" "{"
+    (expression ("func" identifier "(" (separated-list identifier ",") ")" "{"
                         (arbno expression) opt-return "}") func-exp)
+    ; --- Funcion anónima ----
+    (expression ("lambda"  "(" (separated-list identifier ",") ")" "{"
+                        expression "}") lambda-exp)
+    
     (opt-return ("return" expression) with-return)
     (opt-return () no-return)
     
@@ -53,8 +57,8 @@
      ;                   (arbno expression) "}") func-exp-no-return)
     
     ; --- Función recursiva --- (puede quitarse si se logra implementar recursion en func)
-    (expression ("recfunc" identifier "(" (separated-list identifier ",") ")" "{"
-                           (arbno expression) "return" expression "}") recfunc-exp)
+    ;(expression ("recfunc" identifier "(" (separated-list identifier ",") ")" "{"
+    ;                       (arbno expression) "return" expression "}") recfunc-exp)
     
     ; --- invocacion de funcion va a identifier exp ---
 
@@ -247,7 +251,7 @@
 (define-datatype procval procval?
   (closure
    (ids (list-of symbol?))
-   (body expression?)
+   (body (list-of expression?))
    (env environment?)))
 
 
@@ -294,7 +298,7 @@
         (let ((env (extended-env-record proc-names vec old-env)))
           (for-each
             (lambda (pos ids body)
-              (vector-set! vec pos (direct-target (closure ids body env))))
+              (vector-set! vec pos (direct-target (closure ids body env) #f)))
             (iota len) idss bodies)
           env)))))
 
@@ -328,7 +332,11 @@
 
 (define expval?
   (lambda (x)
-    (or (number? x) (procval? x))))
+    (or (number? x) 
+        (string? x) 
+        (boolean? x)
+        (special-val? x)
+        (procval? x))))
 
 (define ref-to-direct-target?
   (lambda (x)
@@ -589,6 +597,65 @@
           #f
           #t))
     ))
+
+; --- Ayudante para manejar 'opt-return' ---
+; Combina el cuerpo (body-exps) y el return (opt-return-ast)
+; en una sola lista de expresiones para la clausura.
+(define (eval-opt-return body-exps opt-return-ast)
+  (cases opt-return opt-return-ast
+    
+    ; Caso 1: El programador escribió "return exp;"
+    (with-return (return-exp)
+      ; El cuerpo es la lista de expresiones + la expresión del return
+      (append body-exps (list return-exp)))
+      
+    ; Caso 2: El programador NO escribió "return"
+    (no-return ()
+      ; El cuerpo es la lista de expresiones + un 'null' implícito al final que va a ser lo que hay que devolver
+      (append body-exps (list (null-exp))))
+    ))
+
+(define eval-rands
+  (lambda (rands env)
+    (map (lambda (x) (eval-rand x env)) rands)))
+
+(define eval-rand
+  (lambda (rand env)
+    (cases expression rand
+      
+      ; --- CASO 1: El argumento es un identificador (ej. f(x)) ---
+      (identifier-exp (id suffix)
+        
+        ; --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+        ; Usamos 'cases' para determinar el tipo de sufijo
+        (cases identifier-suffix suffix
+          
+          ; --- 1a. Es 'x' (simple). Pasa por REFERENCIA ---
+          (val-var-suffix ()
+            ; --- Lógica de Paso-por-Referencia ---
+            (indirect-target
+             (let ((ref (apply-env-ref env id)))
+               ; Resuelve la cadena para encontrar la referencia FINAL
+               (cases target (primitive-deref ref)
+                 (direct-target (expval mutable?) ref)
+                 (indirect-target (ref1) ref1)))))
+          
+          ; --- 1b. Es 'x(1)' o 'x=5' (complejo). Pasa por VALOR ---
+          (else
+           ; 'rand' es la expresión COMPLETA (ej. 'x(1)')
+           (let ((val (eval-expression rand env)))
+             ; --- Lógica de Paso-por-Valor ---
+             (direct-target val #t)))
+          
+          )) ; fin cases identifier-suffix
+      
+      ; --- CASO 2: Es cualquier otra cosa (ej. f(5) o f(x+2)) ---
+      (else
+       (let ((val (eval-expression rand env)))
+         ; --- Lógica de Paso-por-Valor ---
+         (direct-target val #t))) ; #t = parámetro mutable local
+      
+      ))) ; fin cases expression
 ;***********************************************************************************************************************
 ;**************************************************    Interprete    ***************************************************
 ;***********************************************************************************************************************
@@ -620,18 +687,31 @@
         (let ((exp1 (car exps)))
           (cases expression exp1
             
-            ; --- ¡CAMBIO! ---
-            ; 'var-decl-exp' ahora entrega DOS listas
+            ; --- CASO VAR (Sin cambios) ---
             (var-decl-exp (ids-list exps-list)
               (let ((new-env (eval-declarations ids-list exps-list env #t)))
                 (eval-sequence (cdr exps) new-env)))
             
-            ; --- ¡CAMBIO! ---
-            ; 'const-decl-exp' también entrega DOS listas
+            ; --- CASO CONST (Sin cambios) ---
             (const-decl-exp (ids-list exps-list)
               (let ((new-env (eval-declarations ids-list exps-list env #f)))
                 (eval-sequence (cdr exps) new-env)))
+
+            ; --- CASO FUNCION (Recursiva o normal) ---
+            (func-exp (proc-name id-list body-exps opt-return-ast)
+              ; 1. Prepara el cuerpo (usando el ayudante que ya tienes)
+              (let ((body (eval-opt-return body-exps opt-return-ast)))
+                ; 2. Llama a la "magia" recursiva
+                (let ((new-env 
+                        (extend-env-recursively
+                         (list proc-name) ; Lista de nombres: '(f)
+                         (list id-list)   ; Lista de listas de args: '((x y))
+                         (list body)      ; Lista de cuerpos: '(...)
+                         env)))
+                  ; 3. Continúa en el nuevo ambiente
+                  (eval-sequence (cdr exps) new-env))))
             
+            ; --- CASO ELSE (Expresiones normales) ---
             (else
              (let ((val1 (eval-expression exp1 env)))
                (if (null? (cdr exps))
@@ -642,29 +722,28 @@
 (define eval-declarations
   (lambda (ids-list exps-list env is-mutable?)
     
-    ; El bucle 'loop' ahora toma TRES argumentos
     (let loop ((ids ids-list) 
                (exps exps-list) 
                (current-env env))
       
-      ; Si la lista de IDs está vacía...
       (if (null? ids)
           current-env ; Devuelve el ambiente final
           
-          ; Si no...
-          (let ( (id (car ids))
-                 (exp (car exps)) )
+          (let ((id (car ids))
+                (exp (car exps)))
             
+            ; --- ¡LÓGICA "TONTA" (SIMPLIFICADA)! ---
+            ; Ya NO hay un 'cases' aquí.
             (let ((val (eval-expression exp current-env)))
               (let ((next-env 
                      (extend-env
                       (list id)
                       (list (direct-target val is-mutable?)) 
                       current-env)))
-                
-                ; Repite con el 'cdr' de AMBAS listas
-                (loop (cdr ids) (cdr exps) next-env))))
-          ))))
+                (loop (cdr ids) (cdr exps) next-env)))
+            )))))
+
+
 
 (define eval-expression
   (lambda (exp env)
@@ -702,18 +781,58 @@
                        
     (bin-bool-exp (op exp1 exp2)
       (apply-bool-bin-op op exp1 exp2 env))
-      
+
     (un-bool-exp (op exp1)
       (apply-bool-un-op op exp1 env))
 
+     (lambda-exp (id-list body-exp)
+          ; 2. ¡Crea una clausura no recursiva porque es una funcion que no se guarda en una variable entonces es no recursiva
+          (closure id-list (list body-exp) env))
+
      (else 1))))
+
+
+(define apply-procedure
+  (lambda (proc arg-targets) ; <-- ¡Recibe 'targets', no 'args'!
+    (cases procval proc
+      (closure (ids body saved-env)
+        (if (= (length ids) (length arg-targets))
+            ; --- ¡CAMBIO! ---
+            ; Ya no hay (map ... direct-target ...).
+            ; Los 'arg-targets' (directos e indirectos) se pasan tal cual.
+            (let ((new-env (extend-env ids arg-targets saved-env)))
+              (eval-sequence body new-env))
+            (eopl:error 'apply-procedure "Error de aridad: la función esperaba ~s args, recibió ~s"
+                        (length ids) (length arg-targets)))))))
+
 
 
 (define eval-identifier-suffix
   (lambda (id suffix env)
     (cases identifier-suffix suffix
       (val-var-suffix () (apply-env env id))
-      (else 'faltan_casos))))
+      
+      (assign-suffix (exp1)
+        (let ((val (eval-expression exp1 env)))
+          ; 1. Obtiene la referencia (la llave)
+          (let ((ref (apply-env-ref env id)))
+            ; 2. Llama a setref! (el guardia de seguridad)
+            (setref! ref val))
+            val)) ; La asignación devuelve el valor asignado
+
+      ; --- Caso 3: Llamar a una función ---
+      (call-suffix (rands)
+        ; 1. Busca la clausura
+        (let ((proc (apply-env env id))) 
+          (if (procval? proc)
+              ; 2. ¡Llama al NUEVO ayudante híbrido!
+              (let ((arg-targets (eval-rands rands env)))
+                ; 3. Pasa esos 'targets' a apply-procedure
+                (apply-procedure proc arg-targets))
+              (eopl:error 'eval-identifier-suffix 
+                "Intento de llamar a algo que no es una función: ~s" id))))
+      (else 'faltan_casos)
+      )))
 
 
 ;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
