@@ -117,7 +117,7 @@
     (expression (dict-primitive "(" (separated-list expression ",") ")") dict-prim-exp)
     
     ; --- uso de primitivas sobre cadenas ---
-    (expression (string-primitive "(" (separated-list expression ",") ")") concat-string-exp)
+    (expression (string-primitive "(" (separated-list expression ",") ")") string-primitive-exp)
 
     ; --- uso de primitivas sobre listas ---
     (expression (list-const-prim) list-const-exp)
@@ -173,8 +173,8 @@
     (complex-primitive ("div-complex") div-complex-prim)
 
     ; --- Primitivas sobre cadenas ---
-    (string-primitive ("longitud") length-string-prim)
-    (string-primitive ("concatenar") concat-string-prim)
+    (string-primitive ("length") length-string-prim)
+    (string-primitive ("concat") concat-string-prim)
     
     ; --- Primitivas sobre listas ---
     (list-const-prim ("vacio") empty-prim) ;crea una lista vacia
@@ -648,6 +648,38 @@
          (direct-target val #t))) ; #t = parámetro mutable local
       
       ))) ; fin cases expression
+
+
+(define (ensure-string val prim-name)
+  (if (string? val)
+      val
+      (eopl:error 'apply-string-primitive "Error en ~s: se esperaba una cadena, pero se recibió ~s"
+                  prim-name val)))
+
+; --- Ayudante para primitivas de cadena ---
+(define (apply-string-primitive prim args)
+  (cases string-primitive prim
+    
+    ; --- longitud("hola") ---
+    (length-string-prim ()
+      (if (= (length args) 1)
+          ; 1. Se asegura de que el argumento sea una cadena
+          (let ((str (ensure-string (car args) 'length)))
+            ; 2. Llama a la función de Racket
+            (string-length str))
+          (eopl:error 'apply-string-primitive "Error en longitud: se esperaba 1 argumento, se recibió ~s" (length args))))
+          
+    ; --- concatenar("hola", "mundo") ---
+    (concat-string-prim ()
+      (if (= (length args) 2)
+          ; 1. Se asegura de que ambos argumentos sean cadenas
+          (let ((str1 (ensure-string (car args) 'concat))
+                (str2 (ensure-string (cadr args) 'concat)))
+            ; 2. Llama a la función de Racket
+            (string-append str1 str2))
+          (eopl:error 'apply-string-primitive "Error en concatenar: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+    
+    ))
 ;***********************************************************************************************************************
 ;**************************************************    Interprete    ***************************************************
 ;***********************************************************************************************************************
@@ -789,6 +821,12 @@
 
      (return-exp (opt-val)
                  (eval-return-exp opt-val env))
+
+     (string-primitive-exp (prim rands)
+      ; 1. Evalúa los argumentos (igual que primapp-exp)
+      (let ((args (eval-primapp-exp-rands rands env)))
+        ; 2. Llama al aplicador de cadenas
+        (apply-string-primitive prim args)))
 
      (else 1))))
 
