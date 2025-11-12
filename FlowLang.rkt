@@ -83,7 +83,7 @@
     
     
     ; --- Secuenciación --- opcional
-    (expression ("begin" expression (arbno ";" expression) "end") begin-exp)
+    ;(expression ("begin" expression (arbno ";" expression) "end") begin-exp)
 
     ; --- Condicional ---
     (expression ("if" "(" expression ")" "then" "{" (arbno expression) "}"
@@ -98,15 +98,15 @@
 
     ; --- switch ---
     (expression ("switch" "(" expression ")" "{"
-                          (arbno "case" expression ":" "{" expression "}")
-                          "default" ":" "{" expression "}"
+                          (arbno "case" expression ":" "{" (arbno expression) "}")
+                          "default" ":" "{" (arbno expression) "}"
                           "}") switch-exp)
 
     ; --- While ---
-    (expression ("while" expression "do" expression "done") while-exp)
+    (expression ("while" expression "do" (arbno expression) "done") while-exp)
 
     ; --- For ---
-    (expression ("for" identifier "in" expression "do" expression "done") for-exp)
+    (expression ("for" identifier "in" expression "do" (arbno expression) "done") for-exp)
 
     ; --- Listas ---
     (expression ("[" (separated-list expression ",") "]") list-exp)
@@ -762,7 +762,7 @@
           (let ((id (car ids))
                 (exp (car exps)))
             
-            ; --- ¡LÓGICA "TONTA" (SIMPLIFICADA)! ---
+           
             ; Ya NO hay un 'cases' aquí.
             (let ((val (eval-expression exp current-env)))
               (let ((next-env 
