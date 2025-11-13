@@ -21,6 +21,22 @@
   (number (digit (arbno digit) "." digit (arbno digit) ) number )
   (number ("-" digit (arbno digit) "." digit (arbno digit) ) number )
 
+  (string ("\"" 
+        (arbno (or letter 
+                   digit 
+                   whitespace 
+                   "." "," ":" ";" 
+                   "!" "?" 
+                   "-" "_" 
+                   "'" 
+                   "/" "\\" 
+                   "(" ")" 
+                   "[" "]" 
+                   "{" "}" 
+                   "@" "#" "$" "%" "&" 
+                   "+" "*" "=" 
+                   "<" ">"))
+        "\"") string)
   ))
 
 ;Especificación Sintáctica (gramática)
@@ -29,7 +45,7 @@
   '((program ((arbno expression) "end") a-program)
     (expression ("@ENV") environment-exp)
     (expression (number) lit-exp)
-    (expression ("\""identifier"\"" ) text-lit)
+    (expression (string) text-lit)
     (expression ("print" "(" expression ")") print-exp) ;usar internamente el display de racket
     (expression (primitive "(" (separated-list expression ",")")") primapp-exp)
     
@@ -123,7 +139,9 @@
     (expression (list-const-prim) list-const-exp)
     (expression (list-unaria-prim "(" expression ")") list-un-exp)
     (expression (list-binaria-prim "(" expression "," expression ")") list-bin-exp)
-    (expression (list-trinaria-primitive "(" expression "," expression "," expression ")") list-tri-exp)
+
+    (expression (list-ternaria-prim "(" expression "," expression "," expression ")") list-ter-exp)
+    
 
     
     ; --- Clonación ---
@@ -184,11 +202,10 @@
     (list-unaria-prim ("cabeza") head-prim)
     (list-unaria-prim ("cola") tail-prim)
     
-    (list-binaria-prim ("crear-lista") make-list-prim)
-    (list-binaria-prim ("append") append-prim)
-    (list-binaria-prim ("ref-list") ref-list-prim) ;pregunta por el valor de una lista
     
-    (list-trinaria-primitive ("set-list") set-list-prim)
+    (list-binaria-prim ("append") append-prim)
+    (list-binaria-prim ("rlist") ref-list-prim) ;pregunta por el valor de una lista
+    (list-ternaria-prim ("clist") change-list-prim)
 
     ; --- Primitivas sobre diccionarios ---
     (dict-primitive ("diccionario?") dict?-prim)
@@ -343,6 +360,7 @@
     (or (number? x) 
         (string? x) 
         (boolean? x)
+        (list? x)
         (special-val? x)
         (procval? x)
         (complex-val? x))))
@@ -690,9 +708,15 @@
       
       ; --- CASO 2: Es cualquier otra cosa (ej. f(5) o f(x+2)) ---
       (else
-       (let ((val (eval-expression rand env)))
-         ; --- Lógica de Paso-por-Valor ---
-         (direct-target val #t))) ; #t = parámetro mutable local
+ (let ((val (eval-expression rand env)))
+   ; Si es una lista, creamos una referencia temporal
+   (if (list? val)
+       ; NUEVO: Para listas, crear un vector temporal que actúe como referencia
+       (let ((vec (make-vector 1)))
+         (vector-set! vec 0 (direct-target val #t))
+         (indirect-target (a-ref 0 vec)))
+       ; Para otros tipos: paso por valor
+       (direct-target val #t)))) ; #t = parámetro mutable local
       
       ))) ; fin cases expression
 
@@ -827,7 +851,8 @@
    (cases expression exp
       (environment-exp () env)
       (lit-exp (datum) datum)
-      (text-lit (text) (symbol->string text)) ; Convierte 'hola en "hola"
+      (text-lit (text) ; Convierte 'hola en "hola"
+        (substring text 1 (- (string-length text) 1)))
       (true-exp () #t)
       (false-exp () #f)
       (null-exp () null-val)
@@ -887,7 +912,94 @@
      (complex-primitive-exp (prim rands)
                              (let ((args (eval-primapp-exp-rands rands env)))
                                (apply-complex-primitive prim args)))
-                   
+    
+    (list-exp (exps-list)
+        (let eval-list ((exps exps-list))
+            (if (null? exps)
+                '()
+                (cons (eval-expression (car exps) env)
+                    (eval-list (cdr exps))))))
+
+    (list-const-exp (prim)
+      (cases list-const-prim prim
+        (empty-prim () '())))
+
+    (list-un-exp (prim exp1)
+      (let ((val (eval-expression exp1 env)))
+        (cases list-unaria-prim prim
+          (empty?-prim () (null? val))
+          (list?-prim () (list? val))
+          (head-prim () 
+            (if (and (list? val) (not (null? val)))
+                (car val)
+                (eopl:error 'cabeza "La lista esta vacia o no es una lista")))
+          (tail-prim () 
+            (if (and (list? val) (not (null? val)))
+                (cdr val)
+                (eopl:error 'cola "La lista esta vacia o no es una lista"))))))
+
+    (list-bin-exp (prim exp1 exp2)
+      (let ((val1 (eval-expression exp1 env))
+            (val2 (eval-expression exp2 env)))
+        (cases list-binaria-prim prim
+          (append-prim () 
+            (if (and (list? val1) (list? val2))
+                (append val1 val2)
+                (eopl:error 'append "Ambos argumentos deben ser listas")))
+          (ref-list-prim () 
+            (if (and (list? val1) (number? val2))
+                (if (and (>= val2 0) (< val2 (length val1)))
+                    (list-ref val1 val2)
+                    (eopl:error 'rlist "Indice fuera de rango"))
+                (eopl:error 'rlist "Primer argumento debe ser lista y segundo un numero"))))))
+                    ; --- PRIMITIVA TERNARIA DE LISTAS ---
+    (list-ter-exp (prim exp1 exp2 exp3)
+      (let ((val1 (eval-expression exp1 env))
+            (val2 (eval-expression exp2 env))
+            (val3 (eval-expression exp3 env)))
+        (cases list-ternaria-prim prim
+          (change-list-prim ()
+            ; clist(lista, indice, nuevo-valor)
+            (if (and (list? val1) (number? val2))
+                (if (and (>= val2 0) (< val2 (length val1)))
+                    ; Usa recursión para reconstruir la lista
+                    (letrec ((cambiar
+                              (lambda (lst i contador)
+                                (if (null? lst)
+                                    '()
+                                    (if (= contador i)
+                                        (cons val3 (cdr lst))
+                                        (cons (car lst) 
+                                              (cambiar (cdr lst) i (+ contador 1))))))))
+                      (cambiar val1 val2 0))
+                    (eopl:error 'clist "Indice fuera de rango: ~s" val2))
+                (eopl:error 'clist "El primer argumento debe ser lista y el segundo un numero"))))))            
+    (while-exp (test-exp body-exps)
+    (letrec ((ejecutar-while
+            (lambda ()
+              (let ((test-val (eval-expression test-exp env)))
+                (if (true-value? test-val)
+                    (begin
+                      (eval-sequence body-exps env)
+                      (ejecutar-while))  ; Llamada recursiva
+                    (void-val))))))
+        (ejecutar-while)))  ; Primera llamada
+    (for-exp (var lista-exp body-exps)
+        (let ((lista (eval-expression lista-exp env)))
+        (if (list? lista)
+        (letrec ((iterar
+                  (lambda (elementos)
+                    (if (null? elementos)
+                        (void-val)
+                        (let* ((elemento (car elementos))
+                               (new-env (extend-env 
+                                         (list var)
+                                         (list (direct-target elemento #t))
+                                         env)))
+                          (eval-sequence body-exps new-env)
+                          (iterar (cdr elementos)))))))  ; Llamada recursiva
+          (iterar lista))  ; Primera llamada
+        (eopl:error 'for-exp "La expresion debe evaluar a una lista"))))
 
      (else 1))))
 
@@ -972,29 +1084,38 @@
 
 (define (pretty-print-expval val)
   (cond
+    ; --- Caso para Listas (NUEVO) ---
+    ((list? val)
+     (if (null? val)
+         "[]"
+         (string-append "[" 
+                        (let print-list ((lst val))
+                          (if (null? (cdr lst))
+                              (pretty-print-expval (car lst))
+                              (string-append (pretty-print-expval (car lst))
+                                           ", "
+                                           (print-list (cdr lst)))))
+                        "]")))
+    
     ; --- Caso 1: Complejos (¡La estrella!) ---
     ((complex-val? val)
      (cases complex-val val
        (a-complex (r i)
-         ; Lógica para formatearlo "bonito"
          (cond
-           ((zero? i) (number->string r)) ; Solo real
-           ((zero? r) (string-append (number->string i) "i")) ; Solo imag
-           ((positive? i) (string-append "(" (number->string r) " + " (number->string i) "i" ")")) ; 5 + 3i
-           ((negative? i) (string-append "(" (number->string r) " - " (number->string (abs i)) "i" ")")) ; 5 - 3i
-           ))))
+           ((zero? i) (number->string r))
+           ((zero? r) (string-append (number->string i) "i"))
+           ((positive? i) (string-append "(" (number->string r) " + " (number->string i) "i" ")"))
+           ((negative? i) (string-append "(" (number->string r) " - " (number->string (abs i)) "i" ")"))))))
     
-    ; --- Otros casos (para que 'print' funcione con todo) ---
+    ; --- Otros casos ---
     ((number? val) (number->string val))
-    ((string? val) val) ; Los strings ya son bonitos
+    ((string? val) val)
     ((boolean? val) (if val "true" "false"))
     ((procval? val) "<function>")
     ((null-val? val) "null")
-    ((void-val? val) "") ; Un valor 'void' no imprime nada
-
-    ; --- Fallback (por si acaso) ---
-    (else (eopl:error 'pretty-print "Valor desconocido no se puede imprimir: ~s" val))
-    ))
+    ((void-val? val) "")
+    
+    (else (eopl:error 'pretty-print "Valor desconocido: ~s" val))))
 
 
 ;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
