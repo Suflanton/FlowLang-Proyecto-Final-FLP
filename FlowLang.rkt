@@ -827,14 +827,17 @@
    (cases expression exp
       (environment-exp () env)
       (lit-exp (datum) datum)
-      (text-lit (text) text)
+      (text-lit (text) (symbol->string text)) ; Convierte 'hola en "hola"
       (true-exp () #t)
       (false-exp () #f)
       (null-exp () null-val)
       (print-exp (printable)
-                 (begin
-                   (display (eval-expression printable env))
-                   (newline)))
+        (begin
+          ; 1. Evalúa la expresión para obtener el VALOR
+          (let ((val (eval-expression printable env)))
+            ; 2. Pasa el valor por el "embellecedor" ANTES de imprimir
+            (display (pretty-print-expval val)))
+          (newline)))
       (identifier-exp (id suffix)
                       (eval-identifier-suffix id suffix env))
       (primapp-exp (prim rands)
@@ -962,6 +965,36 @@
   (a-complex
     (real number?)
     (imag number?)))
+
+;*****************************************************************
+;***************** Ayudante de Impresión (Pretty Printer) **********
+;*****************************************************************
+
+(define (pretty-print-expval val)
+  (cond
+    ; --- Caso 1: Complejos (¡La estrella!) ---
+    ((complex-val? val)
+     (cases complex-val val
+       (a-complex (r i)
+         ; Lógica para formatearlo "bonito"
+         (cond
+           ((zero? i) (number->string r)) ; Solo real
+           ((zero? r) (string-append (number->string i) "i")) ; Solo imag
+           ((positive? i) (string-append "(" (number->string r) " + " (number->string i) "i" ")")) ; 5 + 3i
+           ((negative? i) (string-append "(" (number->string r) " - " (number->string (abs i)) "i" ")")) ; 5 - 3i
+           ))))
+    
+    ; --- Otros casos (para que 'print' funcione con todo) ---
+    ((number? val) (number->string val))
+    ((string? val) val) ; Los strings ya son bonitos
+    ((boolean? val) (if val "true" "false"))
+    ((procval? val) "<function>")
+    ((null-val? val) "null")
+    ((void-val? val) "") ; Un valor 'void' no imprime nada
+
+    ; --- Fallback (por si acaso) ---
+    (else (eopl:error 'pretty-print "Valor desconocido no se puede imprimir: ~s" val))
+    ))
 
 
 ;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
