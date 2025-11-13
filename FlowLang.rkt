@@ -344,7 +344,8 @@
         (string? x) 
         (boolean? x)
         (special-val? x)
-        (procval? x))))
+        (procval? x)
+        (complex-val? x))))
 
 (define ref-to-direct-target?
   (lambda (x)
@@ -508,6 +509,52 @@
             (eopl:error 'apply-primitive "Error en sub1: se esperaba 1 argumento, se recibió ~s" (length args))))
       
       )))
+
+
+; ---  apply-complex-primitive---
+
+(define (ensure-complex-val val prim-name)
+  (if (complex-val? val)
+      val
+      (eopl:error 'apply-complex-primitive "Error en ~s: se esperaba un valor complejo, pero se recibió ~s"
+                  prim-name val)))
+
+
+
+(define apply-complex-primitive
+  (lambda (prim args)
+    
+    ; Se validan los tipos antes
+    (let ((c1 (ensure-complex-val (car args) 'complex-op))
+          (c2 (ensure-complex-val (cadr args) 'complex-op)))
+      
+      (cases complex-val c1
+        (a-complex (a b)
+          
+          (cases complex-val c2
+            (a-complex (c d)
+              
+      
+              (cases complex-primitive prim
+                
+                (sum-complex-prim ()
+                  (a-complex (+ a c) (+ b d)))
+                
+                (sub-complex-prim ()
+                  (a-complex (- a c) (- b d)))
+                
+                (mult-complex-prim ()
+                  (a-complex (- (* a c) (* b d))
+                             (+ (* a d) (* b c))))
+                
+                (div-complex-prim ()
+                  (let ((den (+ (* c c) (* d d))))
+                    (if (zero? den)
+                        (eopl:error 'apply-complex-primitive "División por cero en complejos.")
+                        (a-complex (/ (+ (* a c) (* b d)) den)
+                                   (/ (- (* b c) (* a d)) den)))))
+                
+                ))))))))
 
 
 ; --- Especialista para 'if-exp' (Tu lógica recursiva) ---
@@ -828,6 +875,17 @@
         ; 2. Llama al aplicador de cadenas
         (apply-string-primitive prim args)))
 
+     (complex-exp (num1 num2)
+                  (let ((real-part (eval-expression num1 env))
+                        (imag-part (eval-expression num2 env)))
+                    ; Nos aseguramos que ambas partes sean números
+                    (a-complex real-part imag-part)))
+     
+     (complex-primitive-exp (prim rands)
+                             (let ((args (eval-primapp-exp-rands rands env)))
+                               (apply-complex-primitive prim args)))
+                   
+
      (else 1))))
 
 (define eval-return-exp
@@ -895,6 +953,15 @@
                 "Intento de llamar a algo que no es una función: ~s" id))))
       (else 'faltan_casos)
       )))
+
+;*****************************************************************
+;***************** Valores de Números Complejos  *****************
+;*****************************************************************
+
+(define-datatype complex-val complex-val?
+  (a-complex
+    (real number?)
+    (imag number?)))
 
 
 ;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
