@@ -12,16 +12,16 @@
 ;***********************************************************************************************************************
 
 (define scanner-interpreter
-'(
-  (identifier (letter (arbno (or letter digit "?" "-" "_" ":"))) symbol)
-  (white-sp (whitespace) skip)
-  (comment ("%" (arbno (not #\newline))) skip)
-  (number (digit (arbno digit)) number)
-  (number ("-" digit (arbno digit)) number)
-  (number (digit (arbno digit) "." digit (arbno digit) ) number )
-  (number ("-" digit (arbno digit) "." digit (arbno digit) ) number )
+  '(
+    (identifier (letter (arbno (or letter digit "?" "-" "_"))) symbol)
+    (white-sp (whitespace) skip)
+    (comment ("%" (arbno (not #\newline))) skip)
+    (number (digit (arbno digit)) number)
+    (number ("-" digit (arbno digit)) number)
+    (number (digit (arbno digit) "." digit (arbno digit) ) number )
+    (number ("-" digit (arbno digit) "." digit (arbno digit) ) number )
 
-  ))
+    ))
 
 ;Especificación Sintáctica (gramática)
 
@@ -47,7 +47,7 @@
                         (arbno expression)"}") func-exp)
     ; --- Funcion anónima ----
     (expression ("lambda"  "(" (separated-list identifier ",") ")" "{"
-                        expression "}") lambda-exp)
+                           expression "}") lambda-exp)
     
     ;------ Retorno para función (Sirve como una detención de un flujo de secuencias, más o menos como un break)----------
     
@@ -59,7 +59,7 @@
     
     ; --- Función sin return (implícito null) ---
     ;(expression ("func" "(" (separated-list identifier ",") ")" "{"
-     ;                   (arbno expression) "}") func-exp-no-return)
+    ;                   (arbno expression) "}") func-exp-no-return)
     
     ; --- Función recursiva --- (puede quitarse si se logra implementar recursion en func)
     ;(expression ("recfunc" identifier "(" (separated-list identifier ",") ")" "{"
@@ -87,20 +87,21 @@
 
     ; --- Condicional ---
     (expression ("if" "(" expression ")" "then" "{" (arbno expression) "}"
-             (arbno "elif" "(" expression ")" "then" "{" (arbno expression) "}")
-             "else" "{" (arbno expression)
-             "}")
-            if-exp)
+                      (arbno "elif" "(" expression ")" "then" "{" (arbno expression) "}")
+                      "else" "{" (arbno expression)
+                      "}")
+                if-exp)
 
     ; --- complex ---
     (expression ("complex" "(" expression expression "i" ")") complex-exp)
     (expression (complex-primitive "(" (separated-list expression ",") ")") complex-primitive-exp)
 
     ; --- switch ---
+
     (expression ("switch" "(" expression ")" "{"
-                          (arbno "case" expression ":" "{" (arbno expression) "}")
-                          "default" ":" "{" (arbno expression) "}"
-                          "}") switch-exp)
+              (arbno "case" expression ":" "{" (arbno expression) "}")
+              "default" ":" "{" (arbno expression) "}"
+            "}") switch-exp)
 
     ; --- While ---
     (expression ("while" expression "do" (arbno expression) "done") while-exp)
@@ -227,10 +228,10 @@
 
 (define interpretador
   (sllgen:make-rep-loop "--> "
-    (lambda (pgm) (eval-program pgm))
-    (sllgen:make-stream-parser
-      scanner-interpreter        ; <-- El nombre correcto
-      grammar-simple-interpreter)))
+                        (lambda (pgm) (eval-program pgm))
+                        (sllgen:make-stream-parser
+                         scanner-interpreter        ; <-- El nombre correcto
+                         grammar-simple-interpreter)))
 
 ;***********************************************************************************************************************
 ;*************************************    Valores especiales, referencia y blanco   ************************************
@@ -239,7 +240,7 @@
 (define-datatype special-val special-val?
   (void-val)
   (null-val)
-)
+  )
 
 (define null-val?
   (lambda (v)
@@ -305,9 +306,9 @@
       (let ((vec (make-vector len)))
         (let ((env (extended-env-record proc-names vec old-env)))
           (for-each
-            (lambda (pos ids body)
-              (vector-set! vec pos (direct-target (closure ids body env) #f)))
-            (iota len) idss bodies)
+           (lambda (pos ids body)
+             (vector-set! vec pos (direct-target (closure ids body env) #f)))
+           (iota len) idss bodies)
           env)))))
 
 ;iota: number -> list
@@ -316,13 +317,13 @@
   (lambda (end)
     (let loop ((next 0))
       (if (>= next end) '()
-        (cons next (loop (+ 1 next)))))))
+          (cons next (loop (+ 1 next)))))))
 
 ;función que busca un símbolo en un ambiente
 (define apply-env
   (lambda (env sym)
-      (deref (apply-env-ref env sym))))
-    ;)
+    (deref (apply-env-ref env sym))))
+;)
 
 (define apply-env-ref
   (lambda (env sym)
@@ -391,12 +392,12 @@
       ;      (cases TIPO VARIABLE ...)
       (cases target target-val
         (direct-target (old-val mutable?)
-          (if (eq? mutable? #t)
-              ; 4a. SÍ ES MUTABLE:
-              (primitive-setref! final-ref (direct-target expval #t))
+                       (if (eq? mutable? #t)
+                           ; 4a. SÍ ES MUTABLE:
+                           (primitive-setref! final-ref (direct-target expval #t))
               
-              ; 4b. NO ES MUTABLE:
-              (eopl:error 'setref! "Asignación inválida: No se puede modificar una constante.")))
+                           ; 4b. NO ES MUTABLE:
+                           (eopl:error 'setref! "Asignación inválida: No se puede modificar una constante.")))
         
         (indirect-target (r) (eopl:error 'setref! "Error de referencia inesperado"))
         ))))
@@ -428,8 +429,8 @@
       ((pred (car ls)) 0)
       (else (let ((list-index-r (list-index pred (cdr ls))))
               (if (number? list-index-r)
-                (+ list-index-r 1)
-                #f))))))
+                  (+ list-index-r 1)
+                  #f))))))
 
 
 ;***********************************************************************************************************************
@@ -456,57 +457,57 @@
     (cases primitive prim
       
       (add-prim ()
-        (if (= (length args) 2)
-            (let ((n1 (ensure-number (car args) '+))
-                  (n2 (ensure-number (cadr args) '+)))
-              (+ n1 n2))
-            (eopl:error 'apply-primitive "Error en +: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                (if (= (length args) 2)
+                    (let ((n1 (ensure-number (car args) '+))
+                          (n2 (ensure-number (cadr args) '+)))
+                      (+ n1 n2))
+                    (eopl:error 'apply-primitive "Error en +: se esperaban 2 argumentos, se recibieron ~s" (length args))))
             
       (substract-prim ()
-        (if (= (length args) 2)
-            (let ((n1 (ensure-number (car args) '-))
-                  (n2 (ensure-number (cadr args) '-)))
-              (- n1 n2))
-            (eopl:error 'apply-primitive "Error en -: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                      (if (= (length args) 2)
+                          (let ((n1 (ensure-number (car args) '-))
+                                (n2 (ensure-number (cadr args) '-)))
+                            (- n1 n2))
+                          (eopl:error 'apply-primitive "Error en -: se esperaban 2 argumentos, se recibieron ~s" (length args))))
 
       (mult-prim ()
-        (if (= (length args) 2)
-            (let ((n1 (ensure-number (car args) '*))
-                  (n2 (ensure-number (cadr args) '*)))
-              (* n1 n2))
-            (eopl:error 'apply-primitive "Error en *: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                 (if (= (length args) 2)
+                     (let ((n1 (ensure-number (car args) '*))
+                           (n2 (ensure-number (cadr args) '*)))
+                       (* n1 n2))
+                     (eopl:error 'apply-primitive "Error en *: se esperaban 2 argumentos, se recibieron ~s" (length args))))
       
       ; --- ¡CASO AÑADIDO 1: div-prim! ---
       (div-prim ()
-        (if (= (length args) 2)
-            (let ((n1 (ensure-number (car args) '/))
-                  (n2 (ensure-number (cadr args) '/)))
-              (if (zero? n2) ; Chequeo de división por cero
-                  (eopl:error 'apply-primitive "Error en /: División por cero.")
-                  (/ n1 n2)))
-            (eopl:error 'apply-primitive "Error en /: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                (if (= (length args) 2)
+                    (let ((n1 (ensure-number (car args) '/))
+                          (n2 (ensure-number (cadr args) '/)))
+                      (if (zero? n2) ; Chequeo de división por cero
+                          (eopl:error 'apply-primitive "Error en /: División por cero.")
+                          (/ n1 n2)))
+                    (eopl:error 'apply-primitive "Error en /: se esperaban 2 argumentos, se recibieron ~s" (length args))))
             
       ; --- ¡CASO AÑADIDO 2: mod-prim! ---
       (mod-prim ()
-        (if (= (length args) 2)
-            (let ((n1 (ensure-number (car args) '%))
-                  (n2 (ensure-number (cadr args) '%)))
-              (if (zero? n2) ; Chequeo de división por cero
-                  (eopl:error 'apply-primitive "Error en %: División por cero.")
-                  (modulo n1 n2)))
-            (eopl:error 'apply-primitive "Error en %: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                (if (= (length args) 2)
+                    (let ((n1 (ensure-number (car args) '%))
+                          (n2 (ensure-number (cadr args) '%)))
+                      (if (zero? n2) ; Chequeo de división por cero
+                          (eopl:error 'apply-primitive "Error en %: División por cero.")
+                          (modulo n1 n2)))
+                    (eopl:error 'apply-primitive "Error en %: se esperaban 2 argumentos, se recibieron ~s" (length args))))
             
       (incr-prim ()
-        (if (= (length args) 1)
-            (let ((n1 (ensure-number (car args) 'add1)))
-              (+ n1 1))
-            (eopl:error 'apply-primitive "Error en add1: se esperaba 1 argumento, se recibió ~s" (length args))))
+                 (if (= (length args) 1)
+                     (let ((n1 (ensure-number (car args) 'add1)))
+                       (+ n1 1))
+                     (eopl:error 'apply-primitive "Error en add1: se esperaba 1 argumento, se recibió ~s" (length args))))
             
       (decr-prim ()
-        (if (= (length args) 1)
-            (let ((n1 (ensure-number (car args) 'sub1)))
-              (- n1 1))
-            (eopl:error 'apply-primitive "Error en sub1: se esperaba 1 argumento, se recibió ~s" (length args))))
+                 (if (= (length args) 1)
+                     (let ((n1 (ensure-number (car args) 'sub1)))
+                       (- n1 1))
+                     (eopl:error 'apply-primitive "Error en sub1: se esperaba 1 argumento, se recibió ~s" (length args))))
       
       )))
 
@@ -531,30 +532,30 @@
       (cases complex-val c1
         (a-complex (a b)
           
-          (cases complex-val c2
-            (a-complex (c d)
+                   (cases complex-val c2
+                     (a-complex (c d)
               
       
-              (cases complex-primitive prim
+                                (cases complex-primitive prim
                 
-                (sum-complex-prim ()
-                  (a-complex (+ a c) (+ b d)))
+                                  (sum-complex-prim ()
+                                                    (a-complex (+ a c) (+ b d)))
                 
-                (sub-complex-prim ()
-                  (a-complex (- a c) (- b d)))
+                                  (sub-complex-prim ()
+                                                    (a-complex (- a c) (- b d)))
                 
-                (mult-complex-prim ()
-                  (a-complex (- (* a c) (* b d))
-                             (+ (* a d) (* b c))))
+                                  (mult-complex-prim ()
+                                                     (a-complex (- (* a c) (* b d))
+                                                                (+ (* a d) (* b c))))
                 
-                (div-complex-prim ()
-                  (let ((den (+ (* c c) (* d d))))
-                    (if (zero? den)
-                        (eopl:error 'apply-complex-primitive "División por cero en complejos.")
-                        (a-complex (/ (+ (* a c) (* b d)) den)
-                                   (/ (- (* b c) (* a d)) den)))))
+                                  (div-complex-prim ()
+                                                    (let ((den (+ (* c c) (* d d))))
+                                                      (if (zero? den)
+                                                          (eopl:error 'apply-complex-primitive "División por cero en complejos.")
+                                                          (a-complex (/ (+ (* a c) (* b d)) den)
+                                                                     (/ (- (* b c) (* a d)) den)))))
                 
-                ))))))))
+                                  ))))))))
 
 
 ; --- Especialista para 'if-exp' (Tu lógica recursiva) ---
@@ -627,30 +628,30 @@
   (cases oper-bin-bool op
     
     (and-prim ()
-      ; 1. Evalúa el primer operando
-      (let ((val1 (eval-expression exp1 env)))
-        ; 2. Si el primero es FALSO, devuelve ese valor falso y NO evalúa el segundo
-        (if (true-value? val1)
-            (eval-expression exp2 env) ; Si es verdadero, devuelve el resultado del segundo
-            val1))) ; Cortocircuito: devuelve el valor "falsy"
+              ; 1. Evalúa el primer operando
+              (let ((val1 (eval-expression exp1 env)))
+                ; 2. Si el primero es FALSO, devuelve ese valor falso y NO evalúa el segundo
+                (if (true-value? val1)
+                    (eval-expression exp2 env) ; Si es verdadero, devuelve el resultado del segundo
+                    val1))) ; Cortocircuito: devuelve el valor "falsy"
             
     (or-prim ()
-      ; 1. Evalúa el primer operando
-      (let ((val1 (eval-expression exp1 env)))
-        ; 2. Si el primero es VERDADERO, devuelve ese valor verdadero y NO evalúa el segundo
-        (if (true-value? val1)
-            val1 ; Cortocircuito: devuelve el valor "truthy"
-            (eval-expression exp2 env)))) ; Si es falso, devuelve el resultado del segundo
+             ; 1. Evalúa el primer operando
+             (let ((val1 (eval-expression exp1 env)))
+               ; 2. Si el primero es VERDADERO, devuelve ese valor verdadero y NO evalúa el segundo
+               (if (true-value? val1)
+                   val1 ; Cortocircuito: devuelve el valor "truthy"
+                   (eval-expression exp2 env)))) ; Si es falso, devuelve el resultado del segundo
     ))
 
 ; --- Ayudante para 'not' ---
 (define (apply-bool-un-op op exp1 env)
   (cases oper-un-bool op
     (not-prim ()
-      ; 'not' siempre devuelve un booleano estricto
-      (if (true-value? (eval-expression exp1 env))
-          #f
-          #t))
+              ; 'not' siempre devuelve un booleano estricto
+              (if (true-value? (eval-expression exp1 env))
+                  #f
+                  #t))
     ))
 
 
@@ -665,28 +666,28 @@
       ; --- CASO 1: El argumento es un identificador (ej. f(x)) ---
       (identifier-exp (id suffix)
         
-        ; --- ¡AQUÍ ESTÁ EL CAMBIO! ---
-        ; Usamos 'cases' para determinar el tipo de sufijo
-        (cases identifier-suffix suffix
+                      ; --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+                      ; Usamos 'cases' para determinar el tipo de sufijo
+                      (cases identifier-suffix suffix
           
-          ; --- 1a. Es 'x' (simple). Pasa por REFERENCIA ---
-          (val-var-suffix ()
-            ; --- Lógica de Paso-por-Referencia ---
-            (indirect-target
-             (let ((ref (apply-env-ref env id)))
-               ; Resuelve la cadena para encontrar la referencia FINAL
-               (cases target (primitive-deref ref)
-                 (direct-target (expval mutable?) ref)
-                 (indirect-target (ref1) ref1)))))
+                        ; --- 1a. Es 'x' (simple). Pasa por REFERENCIA ---
+                        (val-var-suffix ()
+                                        ; --- Lógica de Paso-por-Referencia ---
+                                        (indirect-target
+                                         (let ((ref (apply-env-ref env id)))
+                                           ; Resuelve la cadena para encontrar la referencia FINAL
+                                           (cases target (primitive-deref ref)
+                                             (direct-target (expval mutable?) ref)
+                                             (indirect-target (ref1) ref1)))))
           
-          ; --- 1b. Es 'x(1)' o 'x=5' (complejo). Pasa por VALOR ---
-          (else
-           ; 'rand' es la expresión COMPLETA (ej. 'x(1)')
-           (let ((val (eval-expression rand env)))
-             ; --- Lógica de Paso-por-Valor ---
-             (direct-target val #t)))
+                        ; --- 1b. Es 'x(1)' o 'x=5' (complejo). Pasa por VALOR ---
+                        (else
+                         ; 'rand' es la expresión COMPLETA (ej. 'x(1)')
+                         (let ((val (eval-expression rand env)))
+                           ; --- Lógica de Paso-por-Valor ---
+                           (direct-target val #t)))
           
-          )) ; fin cases identifier-suffix
+                        )) ; fin cases identifier-suffix
       
       ; --- CASO 2: Es cualquier otra cosa (ej. f(5) o f(x+2)) ---
       (else
@@ -709,22 +710,22 @@
     
     ; --- longitud("hola") ---
     (length-string-prim ()
-      (if (= (length args) 1)
-          ; 1. Se asegura de que el argumento sea una cadena
-          (let ((str (ensure-string (car args) 'length)))
-            ; 2. Llama a la función de Racket
-            (string-length str))
-          (eopl:error 'apply-string-primitive "Error en longitud: se esperaba 1 argumento, se recibió ~s" (length args))))
+                        (if (= (length args) 1)
+                            ; 1. Se asegura de que el argumento sea una cadena
+                            (let ((str (ensure-string (car args) 'length)))
+                              ; 2. Llama a la función de Racket
+                              (string-length str))
+                            (eopl:error 'apply-string-primitive "Error en longitud: se esperaba 1 argumento, se recibió ~s" (length args))))
           
     ; --- concatenar("hola", "mundo") ---
     (concat-string-prim ()
-      (if (= (length args) 2)
-          ; 1. Se asegura de que ambos argumentos sean cadenas
-          (let ((str1 (ensure-string (car args) 'concat))
-                (str2 (ensure-string (cadr args) 'concat)))
-            ; 2. Llama a la función de Racket
-            (string-append str1 str2))
-          (eopl:error 'apply-string-primitive "Error en concatenar: se esperaban 2 argumentos, se recibieron ~s" (length args))))
+                        (if (= (length args) 2)
+                            ; 1. Se asegura de que ambos argumentos sean cadenas
+                            (let ((str1 (ensure-string (car args) 'concat))
+                                  (str2 (ensure-string (cadr args) 'concat)))
+                              ; 2. Llama a la función de Racket
+                              (string-append str1 str2))
+                            (eopl:error 'apply-string-primitive "Error en concatenar: se esperaban 2 argumentos, se recibieron ~s" (length args))))
     
     ))
 ;***********************************************************************************************************************
@@ -747,7 +748,7 @@
       
       ; 'exps-list' es la lista que viene de (arbno expression)
       (a-program (exps-list)
-        (eval-sequence exps-list (init-env)))
+                 (eval-sequence exps-list (init-env)))
       
       )))
 
@@ -760,36 +761,36 @@
             
             ; --- CASO VAR (Sin cambios) ---
             (var-decl-exp (ids-list exps-list)
-              (let ((new-env (eval-declarations ids-list exps-list env #t)))
-                (eval-sequence (cdr exps) new-env)))
+                          (let ((new-env (eval-declarations ids-list exps-list env #t)))
+                            (eval-sequence (cdr exps) new-env)))
             
             ; --- CASO CONST (Sin cambios) ---
             (const-decl-exp (ids-list exps-list)
-              (let ((new-env (eval-declarations ids-list exps-list env #f)))
-                (eval-sequence (cdr exps) new-env)))
+                            (let ((new-env (eval-declarations ids-list exps-list env #f)))
+                              (eval-sequence (cdr exps) new-env)))
 
             ; --- CASO FUNCION (Recursiva o normal) ---
             (func-exp (proc-name id-list body-exps)
-            (let ((new-env 
-                    (extend-env-recursively
-                     (list proc-name)
-                     (list id-list)
-                     (list body-exps) ; <-- Pasa el 'body-exps' (lista) directo
-                     env)))
-              (eval-sequence (cdr exps) new-env)))
+                      (let ((new-env 
+                             (extend-env-recursively
+                              (list proc-name)
+                              (list id-list)
+                              (list body-exps) ; <-- Pasa el 'body-exps' (lista) directo
+                              env)))
+                        (eval-sequence (cdr exps) new-env)))
           
-          (else
-           ; --- ¡LÓGICA DE PROPAGACIÓN DE 'RETURN'! ---
-           (let ((val1 (eval-expression exp1 env)))
+            (else
+             ; --- ¡LÓGICA DE PROPAGACIÓN DE 'RETURN'! ---
+             (let ((val1 (eval-expression exp1 env)))
              
-             ; 1. ¿Es un paquete de retorno?
-             (if (return-value? val1)
-                 val1 ; <-- ¡ALTO! Pasa el paquete hacia arriba
+               ; 1. ¿Es un paquete de retorno?
+               (if (return-value? val1)
+                   val1 ; <-- ¡ALTO! Pasa el paquete hacia arriba
                  
-                 ; 2. No es un retorno, continúa normal
-                 (if (null? (cdr exps))
-                     val1
-                     (eval-sequence (cdr exps) env)))))
+                   ; 2. No es un retorno, continúa normal
+                   (if (null? (cdr exps))
+                       val1
+                       (eval-sequence (cdr exps) env)))))
             
 
 
@@ -824,7 +825,7 @@
 
 (define eval-expression
   (lambda (exp env)
-   (cases expression exp
+    (cases expression exp
       (environment-exp () env)
       (lit-exp (datum) datum)
       (text-lit (text) (symbol->string text)) ; Convierte 'hola en "hola"
@@ -832,101 +833,144 @@
       (false-exp () #f)
       (null-exp () null-val)
       (print-exp (printable)
-        (begin
-          ; 1. Evalúa la expresión para obtener el VALOR
-          (let ((val (eval-expression printable env)))
-            ; 2. Pasa el valor por el "embellecedor" ANTES de imprimir
-            (display (pretty-print-expval val)))
-          (newline)))
+                 (begin
+                   ; 1. Evalúa la expresión para obtener el VALOR
+                   (let ((val (eval-expression printable env)))
+                     ; 2. Pasa el valor por el "embellecedor" ANTES de imprimir
+                     (display (pretty-print-expval val)))
+                   (newline)))
       (identifier-exp (id suffix)
                       (eval-identifier-suffix id suffix env))
       (primapp-exp (prim rands)
                    (let ((args (eval-primapp-exp-rands rands env)))
                      (apply-primitive prim args)))
      
-     (if-exp (test1 then-body elif-tests elif-bodies else-body)
-        (let ((all-tests (cons test1 elif-tests))
+      (if-exp (test1 then-body elif-tests elif-bodies else-body)
+              (let ((all-tests (cons test1 elif-tests))
               
-              ; 2. Crea la lista de TODOS los cuerpos
-              (all-bodies (cons then-body elif-bodies)))
+                    ; 2. Crea la lista de TODOS los cuerpos
+                    (all-bodies (cons then-body elif-bodies)))
           
-          ; 3. Llama al nuevo especialista con las listas completas
-          (eval-if-exp all-tests all-bodies else-body env)
-          ))
+                ; 3. Llama al nuevo especialista con las listas completas
+                (eval-if-exp all-tests all-bodies else-body env)
+                ))
 
-     (pred-bool-exp (prim exp1 exp2)
-      (apply-predicate prim 
-                       (eval-expression exp1 env) 
-                       (eval-expression exp2 env)))
+      (pred-bool-exp (prim exp1 exp2)
+                     (apply-predicate prim 
+                                      (eval-expression exp1 env) 
+                                      (eval-expression exp2 env)))
                        
-    (bin-bool-exp (op exp1 exp2)
-      (apply-bool-bin-op op exp1 exp2 env))
+      (bin-bool-exp (op exp1 exp2)
+                    (apply-bool-bin-op op exp1 exp2 env))
 
-    (un-bool-exp (op exp1)
-      (apply-bool-un-op op exp1 env))
+      (un-bool-exp (op exp1)
+                   (apply-bool-un-op op exp1 env))
 
-     (lambda-exp (id-list body-exp)
-          ; 2. ¡Crea una clausura no recursiva porque es una funcion que no se guarda en una variable entonces es no recursiva
-          (closure id-list (list body-exp) env))
+      (lambda-exp (id-list body-exp)
+                  ; 2. ¡Crea una clausura no recursiva porque es una funcion que no se guarda en una variable entonces es no recursiva
+                  (closure id-list (list body-exp) env))
 
-     (return-exp (opt-val)
-                 (eval-return-exp opt-val env))
+      (return-exp (opt-val)
+                  (eval-return-exp opt-val env))
 
-     (string-primitive-exp (prim rands)
-      ; 1. Evalúa los argumentos (igual que primapp-exp)
-      (let ((args (eval-primapp-exp-rands rands env)))
-        ; 2. Llama al aplicador de cadenas
-        (apply-string-primitive prim args)))
+      (string-primitive-exp (prim rands)
+                            ; 1. Evalúa los argumentos (igual que primapp-exp)
+                            (let ((args (eval-primapp-exp-rands rands env)))
+                              ; 2. Llama al aplicador de cadenas
+                              (apply-string-primitive prim args)))
 
-     (complex-exp (num1 num2)
-                  (let ((real-part (eval-expression num1 env))
-                        (imag-part (eval-expression num2 env)))
-                    ; Nos aseguramos que ambas partes sean números
-                    (a-complex real-part imag-part)))
+      (complex-exp (num1 num2)
+                   (let ((real-part (eval-expression num1 env))
+                         (imag-part (eval-expression num2 env)))
+                     ; Nos aseguramos que ambas partes sean números
+                     (a-complex real-part imag-part)))
      
-     (complex-primitive-exp (prim rands)
+      (complex-primitive-exp (prim rands)
                              (let ((args (eval-primapp-exp-rands rands env)))
                                (apply-complex-primitive prim args)))
+      ; --- Implementación de SWITCH ---
+      (switch-exp (switch-test case-tests case-bodies default-body)
+      (let ((switch-val (eval-expression switch-test env)))
+        
+        ; 1. Chequeamos si el propio 'switch-test' devolvió un 'return'.
+        (if (return-value? switch-val)
+            switch-val
+            
+            ; 2. El valor es normal. La rama 'else' es UN SOLO letrec.
+            (letrec (
+               ; 2a. La DEFINICIÓN de la función bucle
+               (eval-switch-loop
+                 (lambda (tests bodies)
+                   (if (null? tests)
+                       
+                       ; --- CASO BASE: Ejecutar default ---
+                       (eval-sequence default-body env)
+                       
+                       ; --- PASO RECURSIVO: Probar 'case' actual ---
+                       (let ((current-test-exp (car tests))
+                             (current-body-exps (car bodies)))
+                         
+                         (let ((case-val (eval-expression current-test-exp env)))
+                           
+                           (if (return-value? case-val)
+                               case-val ; Propagar el return
+                               
+                               (if (equal? switch-val case-val)
+                                   
+                                   ; --- ¡COINCIDENCIA! ---
+                                   (eval-sequence current-body-exps env)
+                                   
+                                   ; --- NO COINCIDE ---
+                                   (eval-switch-loop (cdr tests) (cdr bodies))))))))))
+               
+               ; 2b. La LLAMADA INICIAL al bucle.
+               ;     (Esta es la línea que movimos)
+               (eval-switch-loop case-tests case-bodies)
+               
+            ) ; <-- El 'letrec' se cierra aquí
+        ) ; <-- El 'if' se cierra aquí
+      ) ; <-- El 'let' se cierra aquí
+    ) ; <-- El 'switch-exp' se cierra aquí
+      
                    
-
-     (else 1))))
+      (else 1))))
 
 (define eval-return-exp
   (lambda (opt-AST env)
     (cases opt-return-val opt-AST
         
-        ; 2a. Si era 'return 5;'
-        (with-return-val (exp1)
-          (let ((val (eval-expression exp1 env)))
-            (a-return-value val))) ; <-- Envuelve el valor
+      ; 2a. Si era 'return 5;'
+      (with-return-val (exp1)
+        (let ((val (eval-expression exp1 env)))
+          (a-return-value val))) ; <-- Envuelve el valor
             
-        ; 2b. Si era 'return;'
-        (no-return-val ()
-          (a-return-value (void-val))) ; <-- Envuelve 'void'
+      ; 2b. Si era 'return;'
+      (no-return-val ()
+                     (a-return-value (void-val))) ; <-- Envuelve 'void'
         
-        )))
+      ))) 
 
 
 
 (define (apply-procedure proc arg-targets)
   (cases procval proc
     (closure (ids body saved-env)
-      (if (= (length ids) (length arg-targets))
-          (let ((new-env (extend-env ids arg-targets saved-env)))
+             (if (= (length ids) (length arg-targets))
+                 (let ((new-env (extend-env ids arg-targets saved-env)))
             
-            ; 1. Llama a eval-sequence (que podría devolver un paquete)
-            (let ((result (eval-sequence body new-env)))
+                   ; 1. Llama a eval-sequence (que podría devolver un paquete)
+                   (let ((result (eval-sequence body new-env)))
               
-              ; 2. ¡Atrapa el paquete!
-              (if (return-value? result)
-                  ; 3a. Desenuelve el valor
-                  (cases return-value result
-                    (a-return-value (val) val))
-                  ; 3b. No hubo 'return', devuelve el valor de la última exp
-                  result 
-                  )))
-          (eopl:error 'apply-procedure "Error de aridad: la función esperaba ~s args, recibió ~s"
-                        (length ids) (length arg-targets))))))
+                     ; 2. ¡Atrapa el paquete!
+                     (if (return-value? result)
+                         ; 3a. Desenuelve el valor
+                         (cases return-value result
+                           (a-return-value (val) val))
+                         ; 3b. No hubo 'return', devuelve el valor de la última exp
+                         result 
+                         )))
+                 (eopl:error 'apply-procedure "Error de aridad: la función esperaba ~s args, recibió ~s"
+                             (length ids) (length arg-targets))))))
 
 
 
@@ -936,24 +980,24 @@
       (val-var-suffix () (apply-env env id))
       
       (assign-suffix (exp1)
-        (let ((val (eval-expression exp1 env)))
-          ; 1. Obtiene la referencia (la llave)
-          (let ((ref (apply-env-ref env id)))
-            ; 2. Llama a setref! (el guardia de seguridad)
-            (setref! ref val))
-            val)) ; La asignación devuelve el valor asignado
+                     (let ((val (eval-expression exp1 env)))
+                       ; 1. Obtiene la referencia (la llave)
+                       (let ((ref (apply-env-ref env id)))
+                         ; 2. Llama a setref! (el guardia de seguridad)
+                         (setref! ref val))
+                       val)) ; La asignación devuelve el valor asignado
 
       ; --- Caso 3: Llamar a una función ---
       (call-suffix (rands)
-        ; 1. Busca la clausura
-        (let ((proc (apply-env env id))) 
-          (if (procval? proc)
-              ; 2. ¡Llama al NUEVO ayudante híbrido!
-              (let ((arg-targets (eval-rands rands env)))
-                ; 3. Pasa esos 'targets' a apply-procedure
-                (apply-procedure proc arg-targets))
-              (eopl:error 'eval-identifier-suffix 
-                "Intento de llamar a algo que no es una función: ~s" id))))
+                   ; 1. Busca la clausura
+                   (let ((proc (apply-env env id))) 
+                     (if (procval? proc)
+                         ; 2. ¡Llama al NUEVO ayudante híbrido!
+                         (let ((arg-targets (eval-rands rands env)))
+                           ; 3. Pasa esos 'targets' a apply-procedure
+                           (apply-procedure proc arg-targets))
+                         (eopl:error 'eval-identifier-suffix 
+                                     "Intento de llamar a algo que no es una función: ~s" id))))
       (else 'faltan_casos)
       )))
 
@@ -963,8 +1007,8 @@
 
 (define-datatype complex-val complex-val?
   (a-complex
-    (real number?)
-    (imag number?)))
+   (real number?)
+   (imag number?)))
 
 ;*****************************************************************
 ;***************** Ayudante de Impresión (Pretty Printer) **********
@@ -976,13 +1020,13 @@
     ((complex-val? val)
      (cases complex-val val
        (a-complex (r i)
-         ; Lógica para formatearlo "bonito"
-         (cond
-           ((zero? i) (number->string r)) ; Solo real
-           ((zero? r) (string-append (number->string i) "i")) ; Solo imag
-           ((positive? i) (string-append "(" (number->string r) " + " (number->string i) "i" ")")) ; 5 + 3i
-           ((negative? i) (string-append "(" (number->string r) " - " (number->string (abs i)) "i" ")")) ; 5 - 3i
-           ))))
+                  ; Lógica para formatearlo "bonito"
+                  (cond
+                    ((zero? i) (number->string r)) ; Solo real
+                    ((zero? r) (string-append (number->string i) "i")) ; Solo imag
+                    ((positive? i) (string-append "(" (number->string r) " + " (number->string i) "i" ")")) ; 5 + 3i
+                    ((negative? i) (string-append "(" (number->string r) " - " (number->string (abs i)) "i" ")")) ; 5 - 3i
+                    ))))
     
     ; --- Otros casos (para que 'print' funcione con todo) ---
     ((number? val) (number->string val))
@@ -995,6 +1039,8 @@
     ; --- Fallback (por si acaso) ---
     (else (eopl:error 'pretty-print "Valor desconocido no se puede imprimir: ~s" val))
     ))
+
+
 
 
 ;;--------------------------------- Ejecutamos el interpretador --------------------------------------------------------
