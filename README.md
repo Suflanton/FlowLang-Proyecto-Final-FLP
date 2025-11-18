@@ -1,471 +1,483 @@
+Aquí tienes un `README.md` completo y detallado para el repositorio de tu interpretador, basado en todo el código Racket, las especificaciones de la gramática y los programas de ejemplo que has proporcionado.
 
-```markdown
-# FlowLang - Intérprete con Prototipos
+-----
 
-Intérprete desarrollado en Racket usando EOPL que implementa un lenguaje imperativo con tipos de datos avanzados, prototipos y características funcionales.
+# 🌊 FlowLang - Interpretador
 
-## Valores Soportados
+**"Deja que el código fluya."**
 
-El lenguaje soporta 10 tipos de valores denotados:
-- Enteros: `42`, `-15`
-- Flotantes: `3.14`, `-2.5`
-- Números Complejos: `complex(3, 4)` representa 3 + 4i
-- Cadenas: `"Hola mundo"`
-- Booleanos: `true`, `false`
-- Null: `null`
-- Funciones: Clausuras con soporte recursivo
-- Listas: `[1, 2, 3]`
-- Diccionarios: `{nombre: "Ana", edad: 25}`
-- Prototipos: Objetos con herencia prototípica
+Este repositorio contiene la implementación de un interpretador para **FlowLang**, un lenguaje de programación dinámico, de propósito general y basado en prototipos. El interpretador está construido desde cero en Racket utilizando la librería `#lang eopl`.
 
-## Sintaxis General
+Este proyecto es el resultado del curso **Fundamentos de Lenguajes de Programación**.
 
-### Comentarios
-# Comentario de línea
-```
+-----
 
-### Declaraciones de Variables
-```racket
-var x = 10, y = 20, z = 30;
+## ✨ Características Principales
+
+  * **Tipado Dinámico:** Las variables no tienen un tipo fijo y pueden cambiar durante la ejecución.
+  * **Basado en Prototipos:** Utiliza un modelo de objetos similar a JavaScript (pre-ES6), basado en `prototype`, `clone` y `this`, en lugar de un sistema de clases.
+  * **Paso de Parámetros Híbrido:**
+      * **Por Valor:** Para tipos primitivos (Números, Cadenas, Booleanos, Nulos).
+      * **Por Referencia:** Para estructuras mutables (Listas, Diccionarios y Prototipos).
+  * **Funciones de Primera Clase:** Las funciones (`func`) y lambdas (`lambda`) pueden ser asignadas a variables y pasadas como argumentos.
+  * **Gestión de Entornos:** Mantiene un entorno mutable para el estado del programa.
+  * **Estructuras de Datos Nativas:** Soporte para Listas (`[...]`), Diccionarios (`{...}`) y Números Complejos (`complex(...)`).
+  * **Conjunto Completo de Primitivas:** Incluye operaciones aritméticas, booleanas, y de manipulación para listas, diccionarios y cadenas.
+
+-----
+
+## 📦 Tipos de Datos
+
+FlowLang maneja un conjunto de valores expresados que se dividen en dos categorías:
+
+### Primitivos (Inmutables)
+
+  * **Integer/Float:** `10`, `3.14`, `-5`
+  * **Boolean:** `true`, `false`
+  * **String:** `"Hola Mundo"`
+  * **Complex:** `complex(5, 3)` (Representa `5 + 3i`)
+  * **Null:** `null` (Representa la ausencia de valor o el retorno de una función sin `return`).
+
+### Estructuras (Mutables)
+
+  * **List:** `[1, "hola", true]`
+  * **Dictionary:** `{ nombre: "Juan", edad: 25 }`
+  * **Prototype:** `prototype MiProto = { ... };`
+  * **Function:** `func miFuncion(a) { ... }`
+
+-----
+
+## 🔗 Variables, Ámbito y Asignación
+
+### `var` y `const`
+
+El lenguaje usa `var` para variables mutables y `const` para variables inmutables. Ambas declaraciones requieren un punto y coma (`;`) al final.
+
+```flow
+var x = 10;
 const PI = 3.14159;
+
+x = 20;       # Válido
+print(x);     # Imprime 20
+
+PI = 3.0;     # Inválido: Lanza un error de asignación
 ```
 
-Las declaraciones terminan con `;`. Las constantes no pueden ser modificadas.
+Las asignaciones a variables ya declaradas (`x = 20`) no llevan punto y coma.
 
-### Funciones
+### Paso por Valor vs. Referencia
 
-Función con nombre (recursiva):
-```racket
+Este es un concepto central en FlowLang.
+
+  * **Paso por Valor:** Ocurre con tipos primitivos. Al pasar un número o una cadena a una función, se pasa una *copia*. Si la función modifica el parámetro, la variable original fuera de la función no se ve afectada.
+
+    ```flow
+    func testValor(n) {
+        n = 100; # Modifica la copia local
+        return null
+    }
+
+    var y = 50;
+    testValor(y);
+    print(y); # Imprime 50, no 100
+    ```
+
+  * **Paso por Referencia:** Ocurre con Listas, Diccionarios y Prototipos. Al pasar un objeto, se pasa una *referencia* al objeto original en memoria. Las modificaciones al *contenido* del objeto dentro de la función se reflejan fuera de ella. La forma más clara de ver esto es con `this` en prototipos.
+
+    ```flow
+    prototype Auto = {
+        marca: "N/A",
+        setMarca: lambda(m) {
+            access this.marca = m # 'this' es una referencia al objeto original
+            return null
+        }
+    };
+
+    var miAuto = clone(Auto);
+    access miAuto.setMarca("Honda"); # Pasa la referencia de miAuto a 'this'
+    print(miAuto); # Imprime {prototype: marca: "Honda", ...}
+    ```
+
+-----
+
+## 🔄 Estructuras de Control e Iteración
+
+### `if / elif / else`
+
+Permite la ejecución condicional. El bloque `then` es obligatorio. `elif` y `else` son opcionales.
+
+```flow
 func factorial(n) {
-    if (<(n, 2)) then {
-        return 1;
-    } else {
-        return *(n, factorial(-(n, 1)));
+    if (<(n, 0)) then {
+        return 0
+    }
+    elif (==(n, 0)) then {
+        return 1
+    }
+    else {
+        return *(n, factorial(sub1(n)))
     }
 }
 ```
 
-Función anónima (lambda):
-```racket
-var suma = lambda(a, b) { 
-    return +(a, b);
-};
-```
+### `switch`
 
-Las lambdas pueden contener múltiples expresiones. El return puede omitirse y retorna la última expresión evaluada.
+Evalúa una expresión y la compara con múltiples casos. Requiere un bloque `default`.
 
-### Estructuras de Control
-
-Condicional if-elif-else:
-```racket
-if (>(edad, 18)) then {
-    print("Mayor de edad")
-} elif (==(edad, 18)) then {
-    print("Exactamente 18")
-} else {
-    print("Menor de edad")
+```flow
+switch (dia) {
+    case 1: { print("Lunes") }
+    case 2: { print("Martes") }
+    default: { print("Otro dia") }
 }
 ```
 
-Bucle while:
-```racket
+### `while`
+
+Ejecuta un bloque de código (`do ... done`) mientras una condición sea `true`.
+
+```flow
 var i = 0;
-while (<(i, 10)) do
-    print(i)
-    i = +(i, 1);
+while <(i, 5) do
+    print(i);
+    i = add1(i);
 done
 ```
 
-Bucle for:
-```racket
-var lista = [1, 2, 3, 4, 5];
-for elemento in lista do
-    print(elemento)
+### `for`
+
+Itera sobre los elementos de una lista.
+
+```flow
+var miLista = [10, 20, 30];
+for elemento in miLista do
+    print(elemento);
 done
 ```
 
-Switch:
-```racket
-switch (opcion) {
-    case 1: { print("Opción 1") }
-    case 2: { print("Opción 2") }
-    default: { print("Otra") }
-}
-```
+-----
 
-## Operadores y Primitivas
+## 🧬 Modelo de Prototipos (OOP)
 
-### Aritméticas
-```racket
-+(a, b)      # Suma
--(a, b)      # Resta
-*(a, b)      # Multiplicación
-/(a, b)      # División
-%(a, b)      # Módulo
-add1(n)      # Incremento
-sub1(n)      # Decremento
-```
+FlowLang no usa clases. La herencia y el comportamiento se logran clonando objetos existentes (prototipos).
 
-### Relacionales
-```racket
-<(a, b), >(a, b), <=(a, b), >=(a, b)
-==(a, b)     # Igual
-<>(a, b)     # Diferente
-```
+### 1\. `prototype` (Declaración)
 
-### Booleanas
-```racket
-and(a, b)    # Conjunción 
-or(a, b)     # Disyunción 
-not(a)       # Negación
-```
+Define un objeto base. Esta declaración debe terminar en punto y coma (`;`).
 
-## Listas
-
-Crear listas:
-```racket
-var numeros = [1, 2, 3, 4, 5];
-var vacia = vacio();
-```
-
-Operaciones:
-```racket
-cabeza(lista)           # Primer elemento
-cola(lista)             # Resto de la lista
-append(lst1, lst2)      # Concatenar listas
-rlist(lista, indice)    # Acceso por índice
-clist(lista, idx, val)  # Modificar elemento (crea nueva lista)
-vacio?(lista)           # Verifica si está vacía
-lista?(valor)           # Verifica si es lista
-```
-
-## Diccionarios
-
-Los diccionarios son colecciones de pares clave-valor. Las claves deben ser identificadores (sin comillas).
-
-Crear diccionarios:
-```racket
-var persona = {nombre: "Ana", edad: 25, ciudad: "Bogotá"};
-var vacio = crear-diccionario();
-```
-
-Operaciones:
-```racket
-ref-diccionario(dict, clave)        # Obtener valor
-set-diccionario(dict, clave, valor) # Establecer valor (devuelve nuevo diccionario)
-claves(dict)                        # Lista de claves
-valores(dict)                       # Lista de valores
-diccionario?(valor)                 # Verifica si es diccionario
-```
-
-Ejemplo:
-```racket
-var persona = {nombre: "Juan", edad: 30};
-var edad = ref-diccionario(persona, edad);
-var persona2 = set-diccionario(persona, edad, 31);
-print(persona)   # {nombre: Juan, edad: 30} - sin cambios
-print(persona2)  # {nombre: Juan, edad: 31} - nuevo diccionario
-```
-
-## Prototipos (POO)
-
-Los prototipos permiten programación orientada a objetos mediante herencia prototípica.
-
-Definir prototipo:
-```racket
+```flow
 prototype Vehiculo = {
     marca: "Sin marca",
-    modelo: "Sin modelo",
-    encender: lambda() { print("Vehículo encendido") }
-};
-```
-
-Clonar prototipo:
-```racket
-var carro = clone(Vehiculo);
-```
-
-Acceder a propiedades:
-```racket
-var marca = access carro.marca;
-```
-
-Modificar propiedades:
-```racket
-var carro2 = access carro.marca = "Toyota";
-```
-
-Llamar a métodos con this:
-```racket
-prototype Persona = {
-    nombre: "Ana",
-    saludar: lambda() {
-        print(concat("Hola, soy ", access this.nombre))
+    getMarca: lambda() {
+        return access this.marca
     }
 };
-
-var p = clone(Persona);
-access p.saludar()  # Imprime: Hola, soy Ana
 ```
 
-Cuando llamas a un método con `access objeto.metodo()`, la palabra clave `this` dentro del método apunta automáticamente al objeto.
+### 2\. `clone` (Herencia)
 
-## Números Complejos
+Crea un nuevo objeto que hereda las propiedades del prototipo padre.
 
-Crear y operar con números complejos:
-```racket
-var c1 = complex(3, 4);     # 3 + 4i
-var c2 = complex(1, -2);    # 1 - 2i
-
-var suma = sum-complex(c1, c2);
-var resta = sub-complex(c1, c2);
-var producto = mult-complex(c1, c2);
-var division = div-complex(c1, c2);
-
-print(c1)        # (3 + 4i)
-print(producto)  # (11 - 2i)
+```flow
+var miAuto = clone(Vehiculo);
 ```
 
-## Cadenas
+### 3\. `access` (Interacción)
 
-Operaciones sobre cadenas:
-```racket
-var str1 = "Hola";
-var str2 = " Mundo";
+Es la palabra clave universal para interactuar con las propiedades de un prototipo.
 
-var longitud = length(str1);           # 4
-var concatenado = concat(str1, str2);  # "Hola Mundo"
-```
+  * **Obtener propiedad:** `access miAuto.marca`
+  * **Asignar propiedad:** `access miAuto.marca = "Toyota"`
+  * **Llamar método:** `access miAuto.getMarca()`
 
-Nota: No puedes usar `+` para concatenar strings. Debes usar `concat()`.
+### 4\. `this` (Contexto)
 
-## Paso de Parámetros
+Dentro de una función `lambda` en un prototipo, `this` se refiere al objeto que *recibió* la llamada al método. Esto permite que los métodos operen sobre el estado de la instancia específica.
 
-El lenguaje implementa paso híbrido:
-
-Por referencia (se modifican):
-- Identificadores simples de listas, diccionarios y prototipos
-```racket
-func modificar(lista) {
-    var nueva = clist(lista, 0, 999);
-    lista = nueva;  # Modifica el original
-    return None;
-}
-
-var L = [1, 2, 3];
-modificar(L);
-print(L)  # [999, 2, 3] - fue modificado
-```
-
-Por valor (no se modifican):
-- Números, strings, booleanos
-- Expresiones literales
-```racket
-func cambiar(n) {
-    n = 100;
-    return None;
-}
-
-var x = 5;
-cambiar(x);
-print(x)  # 5 - sin cambios
-```
-
-## Características Especiales
-
-### Return
-```racket
-func ejemplo(n) {
-    if (==(n, 0)) then {
-        return 0;
-    } else {
-        return +(n, 1);
-    }
-}
-
-# Return sin valor
-func vacio() {
-    print("Ejecutando")
-    return None;  # Retorna void
-}
-```
-
-### This en métodos
-```racket
+```flow
 prototype Contador = {
-    cuenta: 0,
+    valor: 0,
     incrementar: lambda() {
-        var nueva = +(access this.cuenta, 1);
-        access this.cuenta = nueva;
-        return this;
+        # 'this' se refiere a 'c1' o 'c2'
+        access this.valor = add1(access this.valor);
+        return null
     }
 };
 
-var c = clone(Contador);
-access c.incrementar()
-var valor = access c.cuenta;
-print(valor)  # 1
+var c1 = clone(Contador);
+var c2 = clone(Contador);
+
+access c1.incrementar();
+access c1.incrementar();
+
+print(access c1.valor); # Imprime 2
+print(access c2.valor); # Imprime 0
 ```
 
-Tienes razón en cuestionarlo. Déjame verificar cómo funcionan realmente los diccionarios y prototipos con el paso por referencia:
+-----
 
-[2 tools called]
+## 🛠️ Primitivas (Funciones Nativas)
 
-Tienes razón, esa sección está INCORRECTA. Los diccionarios son inmutables y cuando se pasan por referencia, reasignar el parámetro NO modifica el original. Aquí está la versión corregida:
+El lenguaje incluye un amplio conjunto de primitivas.
 
-```markdown
-### Diccionarios (Inmutables)
+| Categoría | Primitiva | Uso |
+| :--- | :--- | :--- |
+| **Aritmética** | `+`, `-`, `*`, `/`, `%` | `+(10, 5)` |
+| | `add1`, `sub1` | `add1(10)` |
+| **Complejos** | `complex` | `complex(3, 4)` (Crea `3+4i`) |
+| | `sum-complex` | `sum-complex(c1, c2)` |
+| | `sub-complex` | `sub-complex(c1, c2)` |
+| | `mult-complex` | `mult-complex(c1, c2)` |
+| | `div-complex` | `div-complex(c1, c2)` |
+| **Booleanas** | `<`, `>`, `<=`, `>=`, `==`, `<>` | `<(10, 5)` |
+| | `and`, `or`, `not` | `and(true, false)` |
+| **Cadenas** | `length` | `length("hola")` (Devuelve 4) |
+| | `concat` | `concat("a", "b")` (Devuelve "ab") |
+| **Listas** | `vacio` | `vacio` (Constante `[]`) |
+| | `vacio?` | `vacio?([1])` (Devuelve `false`) |
+| | `lista?` | `lista?("a")` (Devuelve `false`) |
+| | `cabeza` | `cabeza([1, 2])` (Devuelve `1`) |
+| | `cola` | `cola([1, 2])` (Devuelve `[2]`) |
+| | `append` | `append([1], [2])` (Devuelve `[1, 2]`) |
+| | `rlist` | `rlist([5, 6, 7], 1)` (Devuelve `6`) |
+| | `clist` | `clist([5, 6, 7], 1, 9)` (Devuelve `[5, 9, 7]`) |
+| **Diccionarios** | `crear-diccionario` | `crear-diccionario()` (Devuelve `{}`) |
+| | `diccionario?` | `diccionario?({})` (Devuelve `true`) |
+| | `ref-diccionario` | `ref-diccionario({a: 1}, a)` (Devuelve `1`) |
+| | `set-diccionario` | `set-diccionario({a: 1}, a, 2)` |
+| | `claves` | `claves({a: 1, b: 2})` (Devuelve `[a, b]`) |
+| | `valores` | `valores({a: 1, b: 2})` (Devuelve `[1, 2]`) |
+| **I/O** | `print` | `print("Hola")` |
 
-Los diccionarios siempre crean nuevas copias al modificarse:
+-----
+
+## 📜 Gramática y Sintaxis
+
+La sintaxis de FlowLang está diseñada para ser clara y declarativa.
+
+| Construcción | Ejemplo de Sintaxis Concreta |
+| :--- | :--- |
+| **Declaración `var`** | `var x = 10, y = "hola";` |
+| **Declaración `const`** | `const Z = [1, 2, 3];` |
+| **Asignación** | `x = 20` |
+| **Declaración `func`** | `func miSuma(a, b) { return +(a, b) }` |
+| **Declaración `lambda`** | `lambda(x) { return add1(x) }` |
+| **Declaración `prototype`**| `prototype MiProto = { a: 1 };` |
+| **Llamada a función** | `miSuma(5, 3)` |
+| **Primitiva** | `+(5, 3)` |
+| **Acceso Prototipo** | `access miProto.a` |
+| **Asignación Prototipo** | `access miProto.a = 2` |
+| **Llamada Método** | `access miProto.miMetodo(1)` |
+
+-----
+
+## 🚀 Cómo Ejecutar
+
+Hay dos formas de ejecutar código FlowLang:
+
+### 1\. REPL (Modo Interactivo)
+
+Simplemente ejecuta el archivo `.rkt` principal en DrRacket. Se iniciará el REPL `(interpretador)`:
 
 ```racket
-var d1 = {x: 10};
-var d2 = set-diccionario(d1, x, 20);
-print(d1)  # {x: 10} - original sin cambios
-print(d2)  # {x: 20} - nuevo diccionario
+; Carga e inicia el REPL
+(interpretador)
 ```
 
-Incluso cuando se pasan a funciones, reasignar el parámetro NO afecta el original:
-
-```racket
-func intentarModificar(dict) {
-    var nuevo = set-diccionario(dict, x, 100);
-    dict = nuevo;  # Solo cambia la variable local
-    return None;
-}
-
-var miDict = {x: 5};
-intentarModificar(miDict);
-print(miDict)  # {x: 5} - SIN cambios
 ```
-
-Para modificar realmente, debes retornar y reasignar:
-
-```racket
-func modificarDict(dict) {
-    return set-diccionario(dict, x, 100);
-}
-
-var miDict = {x: 5};
-miDict = modificarDict(miDict);  # Reasignar el resultado
-print(miDict)  # {x: 100} - ahora sí cambió
-```
-
-### Prototipos (Mutables cuando se pasan por referencia)
-
-Los prototipos usan vectores internos que son mutables. Cuando se pasan por referencia a funciones y usas `access obj.prop = val`, el objeto original se modifica:
-
-```racket
-func cambiarMarca(vehiculo) {
-    access vehiculo.marca = "ModificadaDentro";
-    return None;
-}
-
-prototype Vehiculo = {marca: "Original"};
-var carro = clone(Vehiculo);
-
-print(carro)  # {prototype: marca: Original}
-cambiarMarca(carro);
-print(carro)  # {prototype: marca: ModificadaDentro} - SÍ cambió
-```
-
-Sin embargo, si reasignas el parámetro completo, NO afecta el original:
-
-```racket
-func intentarReemplazar(vehiculo) {
-    prototype Nuevo = {marca: "Nuevo"};
-    vehiculo = Nuevo;  # Solo cambia la variable local
-    return None;
-}
-
-var carro = clone(Vehiculo);
-intentarReemplazar(carro);
-print(carro)  # Sigue siendo el original - sin cambios
-```
-```
-
-¿Así está mejor?
-
-## Ejecución
-
-El intérprete se ejecuta desde Racket:
-```bash
-racket prueba.rkt
-```
-
-Esto abre un REPL interactivo donde puedes escribir expresiones:
-```racket
 --> var x = 10;
 --> print(x)
 10
---> end
+--> 
 ```
 
-O ejecuta el código desde el archivo `program.txt` automáticamente al cargar el intérprete.
+### 2\. Ejecutar un Archivo `.txt`
 
-## Ejemplos Rápidos
+El intérprete está configurado para leer y ejecutar un archivo llamado `program.txt` ubicado en el mismo directorio.
 
-Factorial recursivo:
 ```racket
-func fact(n) {
-    if (<(n, 2)) then {
-        return 1;
-    } else {
-        return *(n, fact(-(n, 1)));
+; Lee el archivo
+(define file
+  (file->string "program.txt"))
+
+; Lo convierte en un Árbol de Sintaxis Abstracta (AST)
+(define AST-program-txt
+  (scan&parse file))
+
+; Evalúa el programa completo
+(eval-program AST-program-txt)
+```
+
+Simplemente escribe tu código FlowLang en `program.txt` y ejecuta el archivo Racket. Los resultados se imprimirán en la consola.
+
+-----
+
+## 💡 Ejemplos de Código
+
+### Ejemplo 1: Factorial Recursivo (con `if/elif/else`)
+
+```flow
+# PROGRAMA: REGISTRO DE FACTORIALES
+ 
+# Función factorial recursiva
+func factorial(n) {
+    if (<(n, 0)) then {
+        return 0
+    }
+    elif (==(n, 0)) then {
+        return 1
+    }
+    elif (==(n, 1)) then {
+        return 1
+    }
+    else {
+        return *(n, factorial(sub1(n)))
     }
 }
+ 
+# Función que calcula factoriales de una lista
+func calcularFactoriales(lista) {
+    if (vacio?(lista)) then {
+        return vacio
+    }
+    else {
+        var primero = cabeza(lista);
+        var resto = cola(lista);
+        var factPrimero = factorial(primero);
+        var factResto = calcularFactoriales(resto);
+        return append([factPrimero], factResto)
+    }
+}
+ 
+# PRUEBA 
+var lista1 = [1, 2, 3, 4, 7];
+var factoriales1 = calcularFactoriales(lista1);
+var registro1 = {numeros: lista1, factoriales: factoriales1};
+ 
+print("PRUEBA 1")
+print(registro1)
 
-print(fact(5))  # 120
+# Salida: {numeros: [1, 2, 3, 4, 7], factoriales: [1, 2, 6, 24, 5040]}
 end
 ```
 
-Map funcional:
-```racket
-func map(L, F) {
-    if (vacio?(L)) then {
-        return vacio;
-    } else {
-        var primero = F(cabeza(L));
-        var resto = map(cola(L), F);
-        return append([primero], resto);
-    }
-}
+### Ejemplo 2: Prototipos, Herencia y `this`
 
-func doble(n) { return *(n, 2); }
-
-var lista = [1, 2, 3, 4];
-var resultado = map(lista, doble);
-print(resultado)  # [2, 4, 6, 8]
-end
-```
-
-Prototipos con herencia:
-```racket
+```flow
+# PROGRAMA: SIMULACIÓN DE POO CON 'this' 
+ 
+# Prototipo base VEHICULO
 prototype Vehiculo = {
-    marca: "Generic",
-    encender: lambda() { 
-        print(concat("Encendiendo ", access this.marca)) 
+    marca: "Sin marca",
+    modelo: "Sin modelo",
+    
+    setMarca: lambda(nuevaMarca) {
+        access this.marca = nuevaMarca
+        return this 
+    },
+    
+    setModelo: lambda(nuevoModelo) {
+        access this.modelo = nuevoModelo
+        return this
     }
 };
-
-var carro = clone(Vehiculo);
-var carro2 = access carro.marca = "Toyota";
-access carro2.encender()  # Encendiendo Toyota
+ 
+# Prototipo MOTO que hereda de VEHICULO
+var Moto = clone(Vehiculo);
+ 
+# Añadir propiedades y métodos específicos de Moto
+Moto = access Moto.cilindrada = 0
+ 
+Moto = access Moto.setCilindrada = lambda(nuevaCilindrada) {
+    access this.cilindrada = nuevaCilindrada
+    return this
+}
+ 
+# --- Creación de 2 MOTOS ---
+ 
+# MOTO 1
+var moto1 = clone(Moto);
+print("--- MOTO 1 (ANTES) ---")
+print(moto1) # Imprime valores por defecto
+ 
+access moto1.setMarca("Honda")
+access moto1.setModelo("CBR")
+access moto1.setCilindrada(1000)
+ 
+# MOTO 2
+var moto2 = clone(Moto);
+print("--- MOTO 2 (ANTES) ---")
+print(moto2) # Imprime valores por defecto
+ 
+access moto2.setMarca("Yamaha")
+access moto2.setModelo("R6")
+access moto2.setCilindrada(600)
+ 
+ 
+# --- Verificación (DESPUÉS) ---
+print("--- Verificando estado final ---")
+ 
+print("MOTO 1 (Final)")
+print(moto1) # {prototype: marca: "Honda", ...}
+ 
+print("MOTO 2 (Final)")
+print(moto2) # {prototype: marca: "Yamaha", ...}
+ 
 end
 ```
 
-## Limitaciones
+### Ejemplo 3: Funciones como Ciudadanos de Primera Clase (`map`)
 
-- Las claves de diccionarios deben ser identificadores sin comillas: `{nombre: "Ana"}` no `{"nombre": "Ana"}`
-- No hay operador `+` para concatenar strings, usar `concat(str1, str2)`
-- El acceso a propiedades requiere `access`: `access objeto.propiedad`
-- Los métodos con `this` solo funcionan cuando se llaman con `access objeto.metodo()`
-- Los prototipos son inmutables (cada modificación crea una copia), excepto cuando se pasan por referencia a funciones
-
-## Autores
-- Maria Juliana Saavedra
-- Libardo Alejandro Quintero
-- Juan David Rincón
-
+```flow
+# -----------------------------------------------------------------
+# 1. Función Auxiliar (La función "F" que map aplicará)
+# -----------------------------------------------------------------
+func incrementar(n) {
+   return add1(n)
+}
+ 
+# -----------------------------------------------------------------
+# 2. Implementación de la Función "map"
+# -----------------------------------------------------------------
+# map(L, F)
+# L: La lista a procesar.
+# F: La función unaria a aplicar a cada elemento de L.
+ 
+func map(L, F) {
+   
+   # --- Caso Base ---
+   if (vacio?(L)) then {
+     return vacio
+   } else {
+     
+     # --- Caso Recursivo ---
+     
+     # 1. Aplicamos la función F al primer elemento (la cabeza) de L.
+     var cabeza-mapeada = F(cabeza(L));
+     
+     # 2. Llamamos recursivamente a 'map' sobre el resto de la lista (la cola).
+     var cola-mapeada = map(cola(L), F);
+     
+     # 3. "Cons": Unimos la cabeza mapeada con la cola mapeada.
+     var lista-cabeza = [ cabeza-mapeada ];
+     
+     return append(lista-cabeza, cola-mapeada)
+   }
+}
+ 
+# -----------------------------------------------------------------
+# 3. Demostración de Uso
+# -----------------------------------------------------------------
+ 
+# Creamos una lista de prueba.
+var mi-lista = [10, 20, 30, 40];
+ 
+# Llamamos a map, pasando nuestra lista y la función 'incrementar'.
+# El resultado esperado es [11, 21, 31, 41]
+var lista-resultado = map(mi-lista, incrementar);
+ 
+# Imprimimos el resultado final en la consola.
+print(lista-resultado)
+ 
+end
 ```
-
