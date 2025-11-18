@@ -291,7 +291,7 @@ Simplemente ejecuta el archivo `.rkt` principal en DrRacket. Se iniciará el REP
 --> 
 ```
 
-### 2\. Ejecutar un Archivo `.txt`
+### 2\. Ejecutar un Archivo `.txt` (Feature tomada del grupo 1: Nicolás Córdoba, Samuel Arenas y Juan Manuel Ampudia / Feature no revisada )
 
 El intérprete está configurado para leer y ejecutar un archivo llamado `program.txt` ubicado en el mismo directorio.
 
