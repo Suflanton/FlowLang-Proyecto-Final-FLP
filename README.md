@@ -1,4 +1,4 @@
-Aquí tienes un `README.md` completo y detallado para el repositorio de tu interpretador, basado en todo el código Racket, las especificaciones de la gramática y los programas de ejemplo que has proporcionado.
+
 
 -----
 
